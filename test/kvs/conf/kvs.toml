@@ -1,0 +1,40 @@
+[server]
+data-path = "/export/Data/raft-kvs"
+log-path = "/export/Logs/raft-kvs"
+log-level = "debug"
+
+[cluster]
+[[cluster.nodes]]
+node-id=1
+host="n1"
+http-port=9991
+heartbeat-port=9992
+replicate-port=9993
+
+[[cluster.nodes]]
+node-id=2
+host="n2"
+http-port=9991
+heartbeat-port=9992
+replicate-port=9993
+
+[[cluster.nodes]]
+node-id=3
+host="n3"
+http-port=9991
+heartbeat-port=9992
+replicate-port=9993
+
+[[cluster.nodes]]
+node-id=4
+host="n4"
+http-port=9991
+heartbeat-port=9992
+replicate-port=9993
+
+[[cluster.nodes]]
+node-id=5
+host="n5"
+http-port=9991
+heartbeat-port=9992
+replicate-port=9993
