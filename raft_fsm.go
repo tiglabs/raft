@@ -48,8 +48,6 @@ func newRaftFsm(config *Config, raftConfig *RaftConfig) (*raftFsm, error) {
 	hs, err := raftConfig.Storage.InitialState()
 	if err != nil {
 		return nil, err
-	} else if hs == nil {
-		hs = new(proto.HardState)
 	}
 
 	r := &raftFsm{
@@ -69,7 +67,22 @@ func newRaftFsm(config *Config, raftConfig *RaftConfig) (*raftFsm, error) {
 			return nil, err
 		}
 	}
+
+	logger.Info("newRaft[%v] [commit: %d, applied: %d, lastindex: %d]", r.id, raftlog.committed, raftConfig.Applied, raftlog.lastIndex())
+
 	if raftConfig.Applied > 0 {
+		lasti := raftlog.lastIndex()
+		if lasti == 0 {
+			// If there is application data but no raft log, then restore to initial state.
+			raftlog.committed = 0
+			raftConfig.Applied = 0
+		} else if lasti < raftConfig.Applied {
+			// If lastIndex<appliedIndex, then the log as the standard.
+			raftlog.committed = lasti
+			raftConfig.Applied = lasti
+		} else if raftlog.committed < raftConfig.Applied {
+			raftlog.committed = raftConfig.Applied
+		}
 		raftlog.appliedTo(raftConfig.Applied)
 	}
 
@@ -77,11 +90,21 @@ func newRaftFsm(config *Config, raftConfig *RaftConfig) (*raftFsm, error) {
 	if err := r.recoverCommit(); err != nil {
 		return nil, err
 	}
-	raftlog.appliedTo(r.raftLog.committed)
-	if r.term == 0 {
-		r.becomeFollower(1, NoLeader)
+	if raftConfig.Leader == config.NodeID {
+		if raftConfig.Term != 0 && r.term <= raftConfig.Term {
+			r.term = raftConfig.Term
+			r.state = stateLeader
+			r.becomeLeader()
+			r.bcastAppend()
+		} else {
+			r.becomeFollower(r.term, NoLeader)
+		}
 	} else {
-		r.becomeFollower(r.term, r.vote)
+		if raftConfig.Leader == NoLeader {
+			r.becomeFollower(r.term, NoLeader)
+		} else {
+			r.becomeFollower(raftConfig.Term, raftConfig.Leader)
+		}
 	}
 
 	if logger.IsEnableDebug() {
@@ -98,7 +121,7 @@ func newRaftFsm(config *Config, raftConfig *RaftConfig) (*raftFsm, error) {
 // raft main method
 func (r *raftFsm) Step(m *proto.Message) {
 	if m.Type == proto.LocalMsgHup {
-		if r.state != stateLeader {
+		if r.state != stateLeader && r.promotable() {
 			ents, err := r.raftLog.slice(r.raftLog.applied+1, r.raftLog.committed+1, noLimit)
 			if err != nil {
 				errMsg := fmt.Sprintf("[raft->Step][%v]unexpected error getting unapplied entries:[%v]", r.id, err)
@@ -116,7 +139,7 @@ func (r *raftFsm) Step(m *proto.Message) {
 				logger.Debug("[raft->Step][%v] is starting a new election at term[%d].", r.id, r.term)
 			}
 			r.campaign(m.ForceVote)
-		} else if logger.IsEnableDebug() {
+		} else if logger.IsEnableDebug() && r.state == stateLeader {
 			logger.Debug("[raft->Step][%v] ignoring LocalMsgHup because already leader.", r.id)
 		}
 		return
@@ -157,39 +180,42 @@ func (r *raftFsm) Step(m *proto.Message) {
 	r.step(r, m)
 }
 
-func (r *raftFsm) loadState(state *proto.HardState) error {
+func (r *raftFsm) loadState(state proto.HardState) error {
 	if state.Commit < r.raftLog.committed || state.Commit > r.raftLog.lastIndex() {
 		return errors.New(fmt.Sprintf("[raft->loadState][%v] state.commit %d is out of range [%d, %d]", r.id, state.Commit, r.raftLog.committed, r.raftLog.lastIndex()))
 	}
 
-	r.raftLog.committed = state.Commit
 	r.term = state.Term
 	r.vote = state.Vote
+	r.raftLog.committed = state.Commit
 	return nil
 }
 
 func (r *raftFsm) recoverCommit() error {
-	committedEntries := r.raftLog.nextEnts()
-	for _, entry := range committedEntries {
-		switch entry.Type {
-		case proto.EntryNormal:
-			if entry.Data == nil || len(entry.Data) == 0 {
-				continue
-			}
-			if _, err := r.sm.Apply(entry.Data, entry.Index); err != nil {
-				return err
-			}
+	for r.raftLog.applied < r.raftLog.committed {
+		committedEntries := r.raftLog.nextEnts(64 * MB)
+		for _, entry := range committedEntries {
+			r.raftLog.appliedTo(entry.Index)
 
-		case proto.EntryConfChange:
-			cc := new(proto.ConfChange)
-			cc.UnMarshal(entry.Data)
-			if _, err := r.sm.ApplyMemberChange(cc, entry.Index); err != nil {
-				return err
+			switch entry.Type {
+			case proto.EntryNormal:
+				if entry.Data == nil || len(entry.Data) == 0 {
+					continue
+				}
+				if _, err := r.sm.Apply(entry.Data, entry.Index); err != nil {
+					return err
+				}
+
+			case proto.EntryConfChange:
+				cc := new(proto.ConfChange)
+				cc.Decode(entry.Data)
+				if _, err := r.sm.ApplyMemberChange(cc, entry.Index); err != nil {
+					return err
+				}
+				r.applyConfChange(cc)
 			}
-			r.applyConfChange(cc)
 		}
 	}
-
 	return nil
 }
 
@@ -262,19 +288,21 @@ func (r *raftFsm) reset(term, lasti uint64, isLeader bool) {
 	r.leader = NoLeader
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
-	r.resetRandomizedElectionTimeout()
 	r.votes = make(map[uint64]bool)
 	r.pendingConf = false
 
 	if isLeader {
+		r.randElectionTick = r.config.ElectionTick - 1
 		for id, p := range r.replicas {
 			r.replicas[id] = newReplica(p.peer, r.config.MaxInflightMsgs)
 			r.replicas[id].next = lasti + 1
 			if id == r.config.NodeID {
 				r.replicas[id].match = lasti
+				r.replicas[id].committed = r.raftLog.committed
 			}
 		}
 	} else {
+		r.resetRandomizedElectionTimeout()
 		for id, p := range r.replicas {
 			r.replicas[id] = newReplica(p.peer, 0)
 		}
@@ -283,6 +311,10 @@ func (r *raftFsm) reset(term, lasti uint64, isLeader bool) {
 
 func (r *raftFsm) resetRandomizedElectionTimeout() {
 	r.randElectionTick = r.config.ElectionTick + r.rand.Intn(r.config.ElectionTick)
+}
+
+func (r *raftFsm) pastElectionTimeout() bool {
+	return r.electionElapsed >= r.randElectionTick
 }
 
 func (r *raftFsm) peers() []proto.Peer {

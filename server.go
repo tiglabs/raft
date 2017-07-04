@@ -10,6 +10,10 @@ import (
 	"github.com/ipdcode/raft/util"
 )
 
+var (
+	fatalStopc = make(chan uint64)
+)
+
 type RaftServer struct {
 	config *Config
 	ticker *time.Ticker
@@ -31,7 +35,7 @@ func NewRaftServer(config *Config) (*RaftServer, error) {
 		heartc: make(chan *proto.Message, 512),
 		stopc:  make(chan struct{}),
 	}
-	if transport, err := NewMultiTransport(&config.TransportConfig, rs); err != nil {
+	if transport, err := NewMultiTransport(rs, &config.TransportConfig); err != nil {
 		return nil, err
 	} else {
 		rs.config.transport = transport
@@ -62,17 +66,17 @@ func (rs *RaftServer) run() {
 			}
 
 		case <-rs.ticker.C:
-			rs.mu.RLock()
-			for _, raft := range rs.rafts {
-				raft.tick()
-			}
-			rs.mu.RUnlock()
-
 			ticks++
 			if ticks >= rs.config.HeartbeatTick {
 				ticks = 0
 				rs.sendHeartbeat()
 			}
+
+			rs.mu.RLock()
+			for _, raft := range rs.rafts {
+				raft.tick()
+			}
+			rs.mu.RUnlock()
 		}
 	}
 }
@@ -98,7 +102,7 @@ func (rs *RaftServer) Stop() {
 			}(s)
 		}
 		wg.Wait()
-		rs.config.transport.Close()
+		rs.config.transport.Stop()
 	}
 }
 
@@ -191,26 +195,26 @@ func (rs *RaftServer) Status(id uint64) (status *Status) {
 	return
 }
 
-func (rs *RaftServer) Term(id uint64) uint64 {
+func (rs *RaftServer) LeaderTerm(id uint64) (leader, term uint64) {
 	rs.mu.RLock()
 	raft, ok := rs.rafts[id]
 	rs.mu.RUnlock()
 
 	if ok {
-		return raft.term()
+		return raft.leaderTerm()
 	}
-	return 0
+	return NoLeader, 0
 }
 
-func (rs *RaftServer) Leader(id uint64) uint64 {
+func (rs *RaftServer) IsLeader(id uint64) bool {
 	rs.mu.RLock()
 	raft, ok := rs.rafts[id]
 	rs.mu.RUnlock()
 
 	if ok {
-		return raft.leader()
+		return raft.isLeader()
 	}
-	return NoLeader
+	return false
 }
 
 func (rs *RaftServer) AppliedIndex(id uint64) uint64 {
@@ -246,14 +250,83 @@ func (rs *RaftServer) Truncate(id uint64, index uint64) {
 	if !ok {
 		return
 	}
-	if err := raft.truncate(index); err != nil {
-		logger.Error("raft[%v] truncate failed, error is:\r\n %s", id, err)
+	raft.truncate(index)
+}
+
+func (rs *RaftServer) GetUnreachable(id uint64) (nodes []uint64) {
+	downReplicas := rs.GetDownReplicas(id)
+	for _, r := range downReplicas {
+		nodes = append(nodes, r.NodeID)
 	}
+	return
+}
+
+// GetDownReplicas 获取down的副本
+func (rs *RaftServer) GetDownReplicas(id uint64) (downReplicas []DownReplica) {
+	rs.mu.RLock()
+	raft, ok := rs.rafts[id]
+	rs.mu.RUnlock()
+
+	if !ok {
+		return nil
+	}
+
+	status := raft.status()
+	if status != nil && len(status.replicas) > 0 {
+		for n, r := range status.replicas {
+			if n == rs.config.NodeID {
+				continue
+			}
+			since := time.Since(r.lastActive)
+			// 两次心跳内没活跃就视为Down
+			downDuration := since - time.Duration(2*rs.config.HeartbeatTick)*rs.config.TickInterval
+			if downDuration > 0 {
+				downReplicas = append(downReplicas, DownReplica{
+					NodeID:      n,
+					DownSeconds: int(downDuration / time.Second),
+				})
+			}
+		}
+	}
+	return
+}
+
+// GetPendingReplica get snapshot pending followers
+func (rs *RaftServer) GetPendingReplica(id uint64) (peers []uint64) {
+	rs.mu.RLock()
+	raft, ok := rs.rafts[id]
+	rs.mu.RUnlock()
+
+	if !ok {
+		return nil
+	}
+
+	status := raft.status()
+	if status != nil && len(status.replicas) > 0 {
+		for n, r := range status.replicas {
+			if n == rs.config.NodeID {
+				continue
+			}
+			if r.state == replicaStateSnapshot {
+				peers = append(peers, n)
+			}
+		}
+	}
+	return
 }
 
 func (rs *RaftServer) sendHeartbeat() {
-	nodes := rs.config.Resolver.AllNodes()
-	for _, nodeID := range nodes {
+	nodes := make(map[uint64]struct{})
+	rs.mu.RLock()
+	for _, raft := range rs.rafts {
+		peers := raft.getPeers()
+		for _, p := range peers {
+			nodes[p] = struct{}{}
+		}
+	}
+	rs.mu.RUnlock()
+
+	for nodeID := range nodes {
 		if nodeID == rs.config.NodeID {
 			continue
 		}

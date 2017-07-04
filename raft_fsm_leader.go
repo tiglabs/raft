@@ -3,6 +3,7 @@ package raft
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/ipdcode/raft/logger"
 	"github.com/ipdcode/raft/proto"
@@ -88,12 +89,13 @@ func stepLeader(r *raftFsm, m *proto.Message) {
 	switch m.Type {
 	case proto.RespMsgAppend:
 		pr.active = true
+		pr.lastActive = time.Now()
 
 		if m.Reject {
 			if logger.IsEnableDebug() {
 				logger.Debug("raft[%v] received msgApp rejection(lastindex: %d) from %v for index %d.", r.id, m.RejectIndex, m.From, m.Index)
 			}
-			if pr.maybeDecrTo(m.Index, m.RejectIndex) {
+			if pr.maybeDecrTo(m.Index, m.RejectIndex, m.Commit) {
 				if pr.state == replicaStateReplicate {
 					pr.becomeProbe()
 				}
@@ -101,13 +103,13 @@ func stepLeader(r *raftFsm, m *proto.Message) {
 			}
 		} else {
 			oldPaused := pr.isPaused()
-			if pr.maybeUpdate(m.Index) {
+			if pr.maybeUpdate(m.Index, m.Commit) {
 				switch {
 				case pr.state == replicaStateProbe:
 					pr.becomeReplicate()
 				case pr.state == replicaStateSnapshot && pr.needSnapshotAbort():
-					if logger.IsEnableDebug() {
-						logger.Debug("raft[%v] snapshot aborted, resumed sending replication messages to %v.", r.id, m.From)
+					if logger.IsEnableWarn() {
+						logger.Warn("raft[%v] snapshot aborted, resumed sending replication messages to %v.", r.id, m.From)
 					}
 					pr.becomeProbe()
 				case pr.state == replicaStateReplicate:
@@ -125,13 +127,17 @@ func stepLeader(r *raftFsm, m *proto.Message) {
 		return
 
 	case proto.RespMsgHeartBeat:
-		pr.active = true
-
 		if pr.state == replicaStateReplicate && pr.inflight.full() {
 			pr.inflight.freeFirstOne()
 		}
-		if pr.match < r.raftLog.lastIndex() {
+		if !pr.pending && (pr.match < r.raftLog.lastIndex() || pr.committed < r.raftLog.committed) {
 			r.sendAppend(m.From)
+		}
+
+		pr.active = true
+		pr.lastActive = time.Now()
+		if pr.state != replicaStateSnapshot {
+			pr.pending = false
 		}
 		return
 
@@ -162,6 +168,7 @@ func stepLeader(r *raftFsm, m *proto.Message) {
 			pr.becomeProbe()
 		} else {
 			pr.active = true
+			pr.lastActive = time.Now()
 			pr.becomeProbe()
 			if logger.IsEnableWarn() {
 				logger.Warn("raft[%v] send snapshot to [%v] succeeded, resumed replication [%s]", r.id, m.From, pr)
@@ -239,6 +246,7 @@ func stepElectionAck(r *raftFsm, m *proto.Message) {
 
 	case proto.RespMsgElectAck:
 		r.replicas[m.From].active = true
+		r.replicas[m.From].lastActive = time.Now()
 		r.acks[m.From] = true
 		if len(r.acks) >= r.quorum() {
 			r.becomeLeader()
@@ -252,7 +260,7 @@ func stepElectionAck(r *raftFsm, m *proto.Message) {
 func (r *raftFsm) tickHeartbeat() {
 	r.heartbeatElapsed++
 	r.electionElapsed++
-	if r.electionElapsed >= r.config.ElectionTick {
+	if r.pastElectionTimeout() {
 		r.electionElapsed = 0
 		if r.config.LeaseCheck && !r.checkLeaderLease() {
 			if logger.IsEnableWarn() {
@@ -315,7 +323,11 @@ func (r *raftFsm) maybeCommit() bool {
 	}
 	sort.Sort(sort.Reverse(mis))
 	mci := mis[r.quorum()-1]
-	return r.raftLog.maybeCommit(mci, r.term)
+	isCommit := r.raftLog.maybeCommit(mci, r.term)
+	if r.state == stateLeader && r.replicas[r.config.NodeID] != nil {
+		r.replicas[r.config.NodeID].committed = r.raftLog.committed
+	}
+	return isCommit
 }
 
 func (r *raftFsm) bcastAppend() {
@@ -401,11 +413,12 @@ func (r *raftFsm) sendAppend(to uint64) {
 			}
 		}
 	}
+	pr.pending = true
 	r.send(m)
 }
 
 func (r *raftFsm) appendEntry(es ...*proto.Entry) {
 	r.raftLog.append(es...)
-	r.replicas[r.config.NodeID].maybeUpdate(r.raftLog.lastIndex())
+	r.replicas[r.config.NodeID].maybeUpdate(r.raftLog.lastIndex(), r.raftLog.committed)
 	r.maybeCommit()
 }

@@ -169,11 +169,11 @@ func (l *raftLog) unstableEntries() []*proto.Entry {
 	return l.unstable.entries
 }
 
-func (l *raftLog) nextEnts() (ents []*proto.Entry) {
+func (l *raftLog) nextEnts(maxSize uint64) (ents []*proto.Entry) {
 	off := util.Max(l.applied+1, l.firstIndex())
 	hi := l.committed + 1
 	if hi > off {
-		ents, err := l.slice(off, hi, noLimit)
+		ents, err := l.slice(off, hi, maxSize)
 		if err != nil {
 			errMsg := fmt.Sprintf("[raftLog->nextEnts]unexpected error when getting unapplied[%d,%d) entries (%v)", off, hi, err)
 			logger.Error(errMsg)

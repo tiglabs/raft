@@ -2,9 +2,8 @@ package logger
 
 import (
 	"fmt"
-	"log"
-	"os"
-	"util"
+
+	"github.com/ipdcode/raft/util/log"
 )
 
 // Logger encapsulation the log interface.
@@ -20,7 +19,7 @@ type Logger interface {
 }
 
 var (
-	stdLogger  = NewDefaultLogger(log.New(os.Stderr, "raft", log.LstdFlags|log.Lshortfile), 0)
+	stdLogger  = NewDefaultLogger(0)
 	raftLogger = Logger(stdLogger)
 )
 
@@ -41,35 +40,39 @@ func IsEnableWarn() bool {
 }
 
 func Debug(format string, v ...interface{}) {
-	raftLogger.Debug(format, v)
+	raftLogger.Debug(format, v...)
 }
 
 func Info(format string, v ...interface{}) {
-	raftLogger.Info(format, v)
+	raftLogger.Info(format, v...)
 }
 
 func Warn(format string, v ...interface{}) {
-	raftLogger.Warn(format, v)
+	raftLogger.Warn(format, v...)
 }
 
 func Error(format string, v ...interface{}) {
-	raftLogger.Error(format, v)
+	raftLogger.Error(format, v...)
 }
 
 // DefaultLogger is a default implementation of the Logger interface.
 type DefaultLogger struct {
-	*log.Logger
+	*log.Log
 	debugEnable bool
 	infoEnable  bool
 	warnEnable  bool
 }
 
-func NewDefaultLogger(log *log.Logger, level int) *DefaultLogger {
+func NewDefaultLogger(level int) *DefaultLogger {
+	logger, err := log.NewLog("", "raft", "DEBUG")
+	if err != nil {
+		panic(err)
+	}
 	return &DefaultLogger{
-		Logger:      log,
-		debugEnable: level <= util.DebugLevel,
-		infoEnable:  level <= util.InfoLevel,
-		warnEnable:  level <= util.WarnLevel,
+		Log:         logger,
+		debugEnable: level <= log.DebugLevel,
+		infoEnable:  level <= log.InfoLevel,
+		warnEnable:  level <= log.WarnLevel,
 	}
 }
 
@@ -82,7 +85,7 @@ func (l *DefaultLogger) IsEnableDebug() bool {
 }
 
 func (l *DefaultLogger) Debug(format string, v ...interface{}) {
-	l.Output(2, l.header("DEBUG", fmt.Sprintf(format, v...)))
+	l.Output(4, l.header("DEBUG", fmt.Sprintf(format, v...)), false)
 }
 
 func (l *DefaultLogger) IsEnableInfo() bool {
@@ -90,7 +93,7 @@ func (l *DefaultLogger) IsEnableInfo() bool {
 }
 
 func (l *DefaultLogger) Info(format string, v ...interface{}) {
-	l.Output(2, l.header("INFO", fmt.Sprintf(format, v...)))
+	l.Output(4, l.header("INFO", fmt.Sprintf(format, v...)), false)
 }
 
 func (l *DefaultLogger) IsEnableWarn() bool {
@@ -98,26 +101,26 @@ func (l *DefaultLogger) IsEnableWarn() bool {
 }
 
 func (l *DefaultLogger) Warn(format string, v ...interface{}) {
-	l.Output(2, l.header("WARN", fmt.Sprintf(format, v...)))
+	l.Output(4, l.header("WARN", fmt.Sprintf(format, v...)), false)
 }
 
 func (l *DefaultLogger) Error(format string, v ...interface{}) {
-	l.Output(2, l.header("ERROR", fmt.Sprintf(format, v...)))
+	l.Output(4, l.header("ERROR", fmt.Sprintf(format, v...)), false)
 }
 
 type FileLogger struct {
-	*util.Log
+	*log.Log
 	debugEnable bool
 	infoEnable  bool
 	warnEnable  bool
 }
 
-func NewFileLogger(log *util.Log, level int) *FileLogger {
+func NewFileLogger(logger *log.Log, level int) *FileLogger {
 	return &FileLogger{
-		Log:         log,
-		debugEnable: level <= util.DebugLevel,
-		infoEnable:  level <= util.InfoLevel,
-		warnEnable:  level <= util.WarnLevel,
+		Log:         logger,
+		debugEnable: level <= log.DebugLevel,
+		infoEnable:  level <= log.InfoLevel,
+		warnEnable:  level <= log.WarnLevel,
 	}
 }
 
@@ -126,7 +129,7 @@ func (fl *FileLogger) IsEnableDebug() bool {
 }
 
 func (fl *FileLogger) Debug(format string, v ...interface{}) {
-	fl.LogDebug(fmt.Sprintf(format, v...))
+	fl.Debug(fmt.Sprintf(format, v...))
 }
 
 func (fl *FileLogger) IsEnableInfo() bool {
@@ -134,7 +137,7 @@ func (fl *FileLogger) IsEnableInfo() bool {
 }
 
 func (fl *FileLogger) Info(format string, v ...interface{}) {
-	fl.LogInfo(fmt.Sprintf(format, v...))
+	fl.Info(fmt.Sprintf(format, v...))
 }
 
 func (fl *FileLogger) IsEnableWarn() bool {
@@ -142,9 +145,9 @@ func (fl *FileLogger) IsEnableWarn() bool {
 }
 
 func (fl *FileLogger) Warn(format string, v ...interface{}) {
-	fl.LogWarn(fmt.Sprintf(format, v...))
+	fl.Warn(fmt.Sprintf(format, v...))
 }
 
 func (fl *FileLogger) Error(format string, v ...interface{}) {
-	fl.LogError(fmt.Sprintf(format, v...))
+	fl.Error(fmt.Sprintf(format, v...))
 }

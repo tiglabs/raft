@@ -42,10 +42,14 @@ const (
 
 // The Snapshot interface is supplied by the application to access the snapshot data of application.
 type Snapshot interface {
-	// if error=io.EOF represent snapshot terminated.
-	Next() ([]byte, error)
+	SnapIterator
 	ApplyIndex() uint64
 	Close()
+}
+
+type SnapIterator interface {
+	// if error=io.EOF represent snapshot terminated.
+	Next() ([]byte, error)
 }
 
 type SnapshotMeta struct {
@@ -55,9 +59,9 @@ type SnapshotMeta struct {
 }
 
 type Peer struct {
-	ID       uint64
-	Priority uint16
 	Type     PeerType
+	Priority uint16
+	ID       uint64
 }
 
 // HardState is the repl state,must persist to the storage.
@@ -90,6 +94,7 @@ type Message struct {
 	Commit       uint64
 	SnapshotMeta SnapshotMeta
 	Entries      []*Entry
+	Context      []byte
 	Snapshot     Snapshot // No need for codec
 }
 

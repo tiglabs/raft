@@ -1,8 +1,6 @@
 package raft
 
 import (
-	"net"
-
 	"github.com/ipdcode/raft/proto"
 )
 
@@ -10,9 +8,10 @@ import (
 type StateMachine interface {
 	Apply(command []byte, index uint64) (interface{}, error)
 	ApplyMemberChange(confChange *proto.ConfChange, index uint64) (interface{}, error)
-	Snapshot() (Snapshot, error)
-	ApplySnapshot(iter SnapIterator) error
+	Snapshot() (proto.Snapshot, error)
+	ApplySnapshot(peers []proto.Peer, iter proto.SnapIterator) error
 	HandleFatalEvent(err *FatalError)
+	HandleLeaderChange(leader uint64)
 }
 
 type SocketType byte
@@ -22,8 +21,17 @@ const (
 	Replicate SocketType = 1
 )
 
+func (t SocketType) String() string {
+	switch t {
+	case 0:
+		return "HeartBeat"
+	case 1:
+		return "Replicate"
+	}
+	return "unkown"
+}
+
 // The SocketResolver interface is supplied by the application to resolve NodeID to net.Addr addresses.
 type SocketResolver interface {
-	AllNodes() []uint64
-	NodeAddress(nodeID uint64, stype SocketType) (net.Addr, error)
+	NodeAddress(nodeID uint64, stype SocketType) (addr string, err error)
 }

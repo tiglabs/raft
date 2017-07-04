@@ -2,16 +2,13 @@ package raft
 
 import (
 	"sync"
-
-	"github.com/ipdcode/raft/util"
 )
 
 var pool = newPoolFactory()
 
 type poolFactory struct {
-	applyPool      *sync.Pool
-	proposalPool   *sync.Pool
-	byteBufferPool *sync.Pool
+	applyPool    *sync.Pool
+	proposalPool *sync.Pool
 }
 
 func newPoolFactory() *poolFactory {
@@ -27,53 +24,31 @@ func newPoolFactory() *poolFactory {
 				return new(proposal)
 			},
 		},
-
-		byteBufferPool: &sync.Pool{
-			New: func() interface{} {
-				return util.NewByteBuffer(16 * KB)
-			},
-		},
 	}
 }
 
 func (f *poolFactory) getApply() *apply {
-	return f.applyPool.Get().(*apply)
+	a := f.applyPool.Get().(*apply)
+	a.command = nil
+	a.future = nil
+	return a
 }
 
 func (f *poolFactory) returnApply(a *apply) {
-	if a == nil {
-		return
+	if a != nil {
+		f.applyPool.Put(a)
 	}
-
-	a.command = nil
-	a.future = nil
-	f.applyPool.Put(a)
 }
 
 func (f *poolFactory) getProposal() *proposal {
-	return f.proposalPool.Get().(*proposal)
+	p := f.proposalPool.Get().(*proposal)
+	p.data = nil
+	p.future = nil
+	return p
 }
 
 func (f *poolFactory) returnProposal(p *proposal) {
-	if p == nil {
-		return
+	if p != nil {
+		f.proposalPool.Put(p)
 	}
-
-	p.data = nil
-	p.future = nil
-	f.proposalPool.Put(p)
-}
-
-func (f *poolFactory) getByteBuffer() *util.ByteBuffer {
-	buf := f.byteBufferPool.Get().(*util.ByteBuffer)
-	buf.Reset()
-	return buf
-}
-
-func (f *poolFactory) returnByteBuffer(b *util.ByteBuffer) {
-	if b == nil {
-		return
-	}
-
-	f.byteBufferPool.Put(b)
 }

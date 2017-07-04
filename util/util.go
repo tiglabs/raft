@@ -4,6 +4,13 @@ import (
 	"time"
 )
 
+const (
+	_  = iota
+	KB = 1 << (10 * iota)
+	MB
+	GB
+)
+
 const time_format = "2006-01-02 15:04:05.000"
 
 type Uint64Slice []uint64

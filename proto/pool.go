@@ -12,6 +12,12 @@ var (
 			}
 		},
 	}
+
+	bytePool = &sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 128)
+		},
+	}
 )
 
 func GetMessage() *Message {
@@ -29,6 +35,7 @@ func GetMessage() *Message {
 	msg.SnapshotMeta.Term = 0
 	msg.SnapshotMeta.Peers = nil
 	msg.Snapshot = nil
+	msg.Context = nil
 	msg.Entries = msg.Entries[0:0]
 	return msg
 }
@@ -37,4 +44,12 @@ func ReturnMessage(msg *Message) {
 	if msg != nil {
 		msgPool.Put(msg)
 	}
+}
+
+func getByteSlice() []byte {
+	return bytePool.Get().([]byte)
+}
+
+func returnByteSlice(b []byte) {
+	bytePool.Put(b)
 }

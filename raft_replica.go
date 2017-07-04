@@ -2,6 +2,7 @@ package raft
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ipdcode/raft/proto"
 	"github.com/ipdcode/raft/util"
@@ -11,16 +12,19 @@ import (
 // Leader maintains progresses of all followers, and sends entries to the follower based on its progress.
 type replica struct {
 	inflight
-	peer                     proto.Peer
-	state                    replicaState
-	paused, active           bool
-	match, next, pendingSnap uint64
+	peer                                proto.Peer
+	state                               replicaState
+	paused, active, pending             bool
+	match, next, committed, pendingSnap uint64
+
+	lastActive time.Time
 }
 
 func newReplica(peer proto.Peer, maxInflight int) *replica {
 	repl := &replica{
-		peer:  peer,
-		state: replicaStateProbe,
+		peer:       peer,
+		state:      replicaStateProbe,
+		lastActive: time.Now(),
 	}
 	if maxInflight > 0 {
 		repl.inflight.size = maxInflight
@@ -62,8 +66,11 @@ func (r *replica) update(index uint64) {
 	r.next = index + 1
 }
 
-func (r *replica) maybeUpdate(index uint64) bool {
+func (r *replica) maybeUpdate(index, commit uint64) bool {
 	updated := false
+	if r.committed < commit {
+		r.committed = commit
+	}
 	if r.match < index {
 		r.match = index
 		updated = true
@@ -76,8 +83,11 @@ func (r *replica) maybeUpdate(index uint64) bool {
 	return updated
 }
 
-func (r *replica) maybeDecrTo(rejected, last uint64) bool {
+func (r *replica) maybeDecrTo(rejected, last, commit uint64) bool {
 	if r.state == replicaStateReplicate {
+		if r.committed < commit {
+			r.committed = commit
+		}
 		if rejected <= r.match {
 			return false
 		}
@@ -91,6 +101,7 @@ func (r *replica) maybeDecrTo(rejected, last uint64) bool {
 	if r.next = util.Min(rejected, last+1); r.next < 1 {
 		r.next = 1
 	}
+	r.committed = commit
 	r.resume()
 	return true
 }
@@ -117,7 +128,7 @@ func (r *replica) isPaused() bool {
 }
 
 func (r *replica) String() string {
-	return fmt.Sprintf("next = %d, match = %d, state = %s, waiting = %v, pendingSnapshot = %d", r.next, r.match, r.state, r.isPaused(), r.pendingSnap)
+	return fmt.Sprintf("next = %d, match = %d, commit = %d, state = %s, waiting = %v, pendingSnapshot = %d", r.next, r.match, r.committed, r.state, r.isPaused(), r.pendingSnap)
 }
 
 // inflight is the replication sliding window,avoid overflowing that sending buffer.

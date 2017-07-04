@@ -108,7 +108,7 @@ func (r *raftFsm) tickElection() {
 	timeout := false
 	// check follower lease (2 * electiontimeout)
 	if r.config.LeaseCheck && r.leader != NoLeader && r.state == stateFollower {
-		timeout = (r.electionElapsed >= 2*r.config.ElectionTick)
+		timeout = (r.electionElapsed >= (r.config.ElectionTick << 1))
 	} else {
 		timeout = r.pastElectionTimeout()
 	}
@@ -127,6 +127,7 @@ func (r *raftFsm) handleAppendEntries(m *proto.Message) {
 		nmsg.Type = proto.RespMsgAppend
 		nmsg.To = m.From
 		nmsg.Index = r.raftLog.committed
+		nmsg.Commit = r.raftLog.committed
 		r.send(nmsg)
 		return
 	}
@@ -136,6 +137,7 @@ func (r *raftFsm) handleAppendEntries(m *proto.Message) {
 		nmsg.Type = proto.RespMsgAppend
 		nmsg.To = m.From
 		nmsg.Index = mlastIndex
+		nmsg.Commit = r.raftLog.committed
 		r.send(nmsg)
 	} else {
 		if logger.IsEnableDebug() {
@@ -146,6 +148,7 @@ func (r *raftFsm) handleAppendEntries(m *proto.Message) {
 		nmsg.Type = proto.RespMsgAppend
 		nmsg.To = m.From
 		nmsg.Index = m.Index
+		nmsg.Commit = r.raftLog.committed
 		nmsg.Reject = true
 		nmsg.RejectIndex = r.raftLog.lastIndex()
 		r.send(nmsg)
@@ -155,8 +158,4 @@ func (r *raftFsm) handleAppendEntries(m *proto.Message) {
 func (r *raftFsm) promotable() bool {
 	_, ok := r.replicas[r.config.NodeID]
 	return ok
-}
-
-func (r *raftFsm) pastElectionTimeout() bool {
-	return r.electionElapsed >= r.randElectionTick
 }

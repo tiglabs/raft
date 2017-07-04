@@ -3,116 +3,114 @@ package storage
 import (
 	"errors"
 	"fmt"
-	"sync"
 
+	"github.com/ipdcode/raft/logger"
 	"github.com/ipdcode/raft/proto"
+	"github.com/ipdcode/raft/util"
 )
 
-// MemoryStorage implements the Storage interface backed by an in-memory array.
+type fsm interface {
+	AppliedIndex(id uint64) uint64
+}
+
+// This storage is circular storage in memory and truncate when over capacity,
+// but keep it a high capacity.
 type MemoryStorage struct {
-	sync.Mutex
-	hardState proto.HardState
+	fsm fsm
+	id  uint64
+	// the threshold of truncate
+	capacity uint64
+	// the index of last truncate
+	truncIndex uint64
+	truncTerm  uint64
+	// the starting offset in the ents
+	start uint64
+	// the actual log in the ents
+	count uint64
+	// the total size of the ents
+	size uint64
+	// ents[i] has raft log position i+snapshot.Metadata.Index
 	ents      []*proto.Entry
+	hardState proto.HardState
 }
 
-func NewMemoryStorage() *MemoryStorage {
-	ms := &MemoryStorage{ents: make([]*proto.Entry, 0, 128)}
-	ms.ents = append(ms.ents, new(proto.Entry))
-	return ms
-}
-
-func (ms *MemoryStorage) InitialState() (*proto.HardState, error) {
-	return &ms.hardState, nil
-}
-
-// SetHardState saves the current HardState.
-func (ms *MemoryStorage) StoreHardState(st *proto.HardState) error {
-	ms.hardState = *st
-	return nil
-}
-
-func (ms *MemoryStorage) Entries(lo, hi uint64, maxSize uint64) (entries []*proto.Entry, isCompact bool, err error) {
-	ms.Lock()
-	defer ms.Unlock()
-
-	offset := ms.ents[0].Index
-	if lo <= offset {
-		return nil, true, nil
+func NewMemoryStorage(fsm fsm, id, capacity uint64) *MemoryStorage {
+	if logger.IsEnableWarn() {
+		logger.Warn("Memory Storage capacity is: %v.", capacity)
 	}
-	if hi > ms.lastIndex()+1 {
-		return nil, false, fmt.Errorf("entries' hi(%d) is out of bound lastindex(%d)", hi, ms.lastIndex())
+	return &MemoryStorage{
+		fsm:      fsm,
+		id:       id,
+		capacity: capacity,
+		size:     capacity,
+		ents:     make([]*proto.Entry, capacity),
 	}
-	// only contains dummy entries.
-	if len(ms.ents) == 1 {
-		return nil, false, errors.New("requested entry at index is unavailable")
-	}
-
-	ents := ms.ents[lo-offset : hi-offset]
-	return limitSize(ents, maxSize), false, nil
 }
 
-func (ms *MemoryStorage) Term(i uint64) (term uint64, isCompact bool, err error) {
-	ms.Lock()
-	defer ms.Unlock()
+func DefaultMemoryStorage() *MemoryStorage {
+	return NewMemoryStorage(nil, 0, 4096)
+}
 
-	offset := ms.ents[0].Index
-	if i < offset {
-		return 0, true, nil
-	}
-	return ms.ents[i-offset].Term, false, nil
+func (ms *MemoryStorage) InitialState() (proto.HardState, error) {
+	return ms.hardState, nil
+}
+
+func (ms *MemoryStorage) FirstIndex() (uint64, error) {
+	return ms.truncIndex + 1, nil
 }
 
 func (ms *MemoryStorage) LastIndex() (uint64, error) {
-	ms.Lock()
-	defer ms.Unlock()
-
 	return ms.lastIndex(), nil
 }
 
 func (ms *MemoryStorage) lastIndex() uint64 {
-	return ms.ents[0].Index + uint64(len(ms.ents)) - 1
+	return ms.truncIndex + ms.count
 }
 
-func (ms *MemoryStorage) FirstIndex() (uint64, error) {
-	ms.Lock()
-	defer ms.Unlock()
-
-	return ms.firstIndex(), nil
+func (ms *MemoryStorage) Term(index uint64) (term uint64, isCompact bool, err error) {
+	switch {
+	case index < ms.truncIndex:
+		return 0, true, nil
+	case index == ms.truncIndex:
+		return ms.truncTerm, false, nil
+	default:
+		return ms.ents[ms.locatePosition(index)].Term, false, nil
+	}
 }
 
-func (ms *MemoryStorage) firstIndex() uint64 {
-	return ms.ents[0].Index + 1
-}
-
-func (ms *MemoryStorage) ApplySnapshot(meta proto.SnapshotMeta) error {
-	ms.Lock()
-	defer ms.Unlock()
-
-	ms.ents = []*proto.Entry{{Term: meta.Term, Index: meta.Index}}
-	return nil
-}
-
-func (ms *MemoryStorage) Truncate(index uint64) error {
-	ms.Lock()
-	defer ms.Unlock()
-
-	offset := ms.ents[0].Index
-	if index <= offset {
-		return errors.New("requested index is unavailable due to compaction")
+func (ms *MemoryStorage) Entries(lo, hi uint64, maxSize uint64) (entries []*proto.Entry, isCompact bool, err error) {
+	if lo <= ms.truncIndex {
+		return nil, true, nil
+	}
+	if hi > ms.lastIndex()+1 {
+		return nil, false, fmt.Errorf("[MemoryStorage->Entries]entries's hi(%d) is out of bound lastindex(%d)", hi, ms.lastIndex())
+	}
+	// only contains dummy entries.
+	if ms.count == 0 {
+		return nil, false, errors.New("requested entry at index is unavailable")
 	}
 
-	if index > ms.lastIndex() {
-		return fmt.Errorf("compact %d is out of bound lastindex(%d)", index, ms.lastIndex())
+	count := hi - lo
+	if count <= 0 {
+		return []*proto.Entry{}, false, nil
 	}
-
-	i := index - offset
-	ents := make([]*proto.Entry, 0, 1+uint64(len(ms.ents))-i)
-	ents = append(ents, new(proto.Entry))
-	ents[0].Index = ms.ents[i].Index
-	ents[0].Term = ms.ents[i].Term
-	ents = append(ents, ms.ents[i+1:]...)
-	ms.ents = ents
-	return nil
+	retEnts := make([]*proto.Entry, count)
+	pos := ms.locatePosition(lo)
+	retEnts[0] = ms.ents[pos]
+	size := ms.ents[pos].Size()
+	limit := uint64(1)
+	for ; limit < count; limit++ {
+		pos = pos + 1
+		if pos >= ms.size {
+			pos = pos - ms.size
+		}
+		size = size + ms.ents[pos].Size()
+		if uint64(size) > maxSize {
+			break
+		}
+		retEnts[limit] = ms.ents[pos]
+	}
+	return retEnts[:limit], false, nil
 }
 
 func (ms *MemoryStorage) StoreEntries(entries []*proto.Entry) error {
@@ -120,57 +118,134 @@ func (ms *MemoryStorage) StoreEntries(entries []*proto.Entry) error {
 		return nil
 	}
 
-	ms.Lock()
-	defer ms.Unlock()
-
-	first := ms.firstIndex()
+	appIndex := uint64(0)
+	if ms.fsm != nil {
+		appIndex = ms.fsm.AppliedIndex(ms.id)
+	}
+	first := appIndex + 1
 	last := entries[0].Index + uint64(len(entries)) - 1
-
-	// shortcut if there is no new entry.
 	if last < first {
+		// shortcut if there is no new entry.
 		return nil
 	}
-	// truncate compacted entries
 	if first > entries[0].Index {
+		// truncate compacted entries
 		entries = entries[first-entries[0].Index:]
 	}
+	offset := entries[0].Index - ms.truncIndex - 1
+	if ms.count < offset {
+		logger.Error("missing log entry [last: %d, append at: %d]", ms.lastIndex(), entries[0].Index)
+		return nil
+	}
 
-	offset := entries[0].Index - ms.ents[0].Index
+	// resize and truncate compacted ents
+	entriesSize := uint64(len(entries))
+	maxSize := offset + entriesSize
+	minSize := maxSize - (appIndex - ms.truncIndex)
 	switch {
-	case uint64(len(ms.ents)) > offset:
-		ms.ents = append([]*proto.Entry{}, ms.ents[:offset]...)
-		ms.ents = append(ms.ents, entries...)
-	case uint64(len(ms.ents)) == offset:
-		ms.ents = append(ms.ents, entries...)
+	case minSize > ms.capacity:
+		// truncate compacted ents
+		if ms.truncIndex < appIndex {
+			ms.truncateTo(appIndex)
+		}
+		// grow ents
+		if minSize > ms.size {
+			ms.resize(ms.capacity+minSize, minSize)
+		}
+
 	default:
-		return fmt.Errorf("missing log entry [last: %d, append at: %d]", ms.lastIndex(), entries[0].Index)
-	}
-
-	return nil
-}
-
-func (ms *MemoryStorage) Clear() error {
-	ms.Lock()
-	defer ms.Unlock()
-
-	ms.ents = append([]*proto.Entry{}, new(proto.Entry))
-	return nil
-}
-
-func (ms *MemoryStorage) Close() {}
-
-func limitSize(ents []*proto.Entry, maxSize uint64) []*proto.Entry {
-	if len(ents) == 0 {
-		return ents
-	}
-
-	size := ents[0].Size()
-	limit := 1
-	for l := len(ents); limit < l; limit++ {
-		size += ents[limit].Size()
-		if size > maxSize {
-			break
+		// truncate compacted ents
+		if maxSize > ms.capacity {
+			cmpIdx := util.Min(appIndex, maxSize-ms.capacity+ms.truncIndex)
+			if ms.truncIndex < cmpIdx {
+				ms.truncateTo(cmpIdx)
+			}
+		}
+		// short ents
+		if ms.size > ms.capacity {
+			ms.resize(ms.capacity, maxSize)
 		}
 	}
-	return ents[:limit]
+
+	// append new entries
+	start := ms.locatePosition(entries[0].Index)
+	next := start + entriesSize
+	if next <= ms.size {
+		copy(ms.ents[start:], entries)
+		if ms.start <= start {
+			ms.count = next - ms.start
+		} else {
+			ms.count = (ms.size - ms.start) + (next - 0)
+		}
+	} else {
+		count := ms.size - start
+		copy(ms.ents[start:], entries[0:count])
+		copy(ms.ents[0:], entries[count:])
+		ms.count = (ms.size - ms.start) + (entriesSize - count)
+	}
+
+	return nil
+}
+
+func (ms *MemoryStorage) StoreHardState(st proto.HardState) error {
+	ms.hardState = st
+	return nil
+}
+
+func (ms *MemoryStorage) ApplySnapshot(meta proto.SnapshotMeta) error {
+	ms.truncIndex = meta.Index
+	ms.truncTerm = meta.Term
+	ms.start = 0
+	ms.count = 0
+	ms.size = ms.capacity
+	ms.ents = make([]*proto.Entry, ms.capacity)
+	return nil
+}
+
+func (ms *MemoryStorage) Truncate(index uint64) error {
+	if index == 0 || index <= ms.truncIndex {
+		return errors.New("requested index is unavailable due to compaction")
+	}
+	if index > ms.lastIndex() {
+		return fmt.Errorf("compact %d is out of bound lastindex(%d)", index, ms.lastIndex())
+	}
+	ms.truncateTo(index)
+	return nil
+}
+
+func (ms *MemoryStorage) Close() {
+
+}
+
+func (ms *MemoryStorage) truncateTo(index uint64) {
+	ms.truncTerm = ms.ents[ms.locatePosition(index)].Term
+	ms.start = ms.locatePosition(index + 1)
+	ms.count = ms.count - (index - ms.truncIndex)
+	ms.truncIndex = index
+}
+
+func (ms *MemoryStorage) resize(capacity, needSize uint64) {
+	ents := make([]*proto.Entry, capacity)
+	count := util.Min(util.Min(capacity, ms.count), needSize)
+	next := ms.start + count
+	if next <= ms.size {
+		copy(ents, ms.ents[ms.start:next])
+	} else {
+		next = next - ms.size
+		copy(ents, ms.ents[ms.start:])
+		copy(ents[ms.size-ms.start:], ms.ents[0:next])
+	}
+
+	ms.start = 0
+	ms.count = count
+	ms.size = capacity
+	ms.ents = ents
+}
+
+func (ms *MemoryStorage) locatePosition(index uint64) uint64 {
+	position := ms.start + (index - ms.truncIndex - 1)
+	if position >= ms.size {
+		position = position - ms.size
+	}
+	return position
 }

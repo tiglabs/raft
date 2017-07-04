@@ -2,14 +2,15 @@ package raft
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/ipdcode/raft/logger"
 	"github.com/ipdcode/raft/proto"
 	"github.com/ipdcode/raft/util"
 )
-
-var fatalStopc = make(chan uint64)
 
 type proposal struct {
 	cmdType proto.EntryType
@@ -24,22 +25,66 @@ type apply struct {
 	command interface{}
 }
 
+type softState struct {
+	leader uint64
+	term   uint64
+}
+
+type peerState struct {
+	peers map[uint64]proto.Peer
+	mu    sync.RWMutex
+}
+
+func (s *peerState) change(c *proto.ConfChange) {
+	s.mu.Lock()
+	switch c.Type {
+	case proto.ConfAddNode:
+		s.peers[c.Peer.ID] = c.Peer
+	case proto.ConfRemoveNode:
+		delete(s.peers, c.Peer.ID)
+	case proto.ConfUpdateNode:
+		s.peers[c.Peer.ID] = c.Peer
+	}
+	s.mu.Unlock()
+}
+
+func (s *peerState) replace(peers []proto.Peer) {
+	s.mu.Lock()
+	s.peers = nil
+	s.peers = make(map[uint64]proto.Peer)
+	for _, p := range peers {
+		s.peers[p.ID] = p
+	}
+	s.mu.Unlock()
+}
+
+func (s *peerState) get() (nodes []uint64) {
+	s.mu.RLock()
+	for n := range s.peers {
+		nodes = append(nodes, n)
+	}
+	s.mu.RUnlock()
+	return
+}
+
 type raft struct {
 	raftFsm           *raftFsm
 	config            *Config
 	raftConfig        *RaftConfig
 	restoringSnapshot util.AtomicBool
-	curTerm           util.AtomicUInt64
-	curLeader         util.AtomicUInt64
 	curApplied        util.AtomicUInt64
+	curSoftSt         unsafe.Pointer
+	prevSoftSt        softState
 	prevHardSt        proto.HardState
+	peerState         peerState
 	pending           map[uint64]*Future
-	snapping          map[uint64]*snapshotResult
+	snapping          map[uint64]*snapshotStatus
 	propc             chan *proposal
+	applyc            chan *apply
 	recvc             chan *proto.Message
 	snapRecvc         chan *snapshotRequest
+	truncatec         chan uint64
 	statusc           chan chan *Status
-	applyc            chan *apply
 	readyc            chan struct{}
 	tickc             chan struct{}
 	electc            chan struct{}
@@ -65,19 +110,21 @@ func newRaft(config *Config, raftConfig *RaftConfig) (*raft, error) {
 		config:     config,
 		raftConfig: raftConfig,
 		pending:    make(map[uint64]*Future),
-		snapping:   make(map[uint64]*snapshotResult),
-		propc:      make(chan *proposal, 256),
+		snapping:   make(map[uint64]*snapshotStatus),
 		recvc:      make(chan *proto.Message, config.ReqBufferSize),
-		snapRecvc:  make(chan *snapshotRequest, 1),
 		applyc:     make(chan *apply, config.AppBufferSize),
-		readyc:     make(chan struct{}, 1),
+		propc:      make(chan *proposal, 256),
+		snapRecvc:  make(chan *snapshotRequest, 1),
+		truncatec:  make(chan uint64, 1),
+		statusc:    make(chan chan *Status, 1),
 		tickc:      make(chan struct{}, 64),
+		readyc:     make(chan struct{}, 1),
 		electc:     make(chan struct{}, 1),
 		stopc:      make(chan struct{}),
 		done:       make(chan struct{}),
-		statusc:    make(chan chan *Status, 1),
 	}
 	raft.curApplied.Set(r.raftLog.applied)
+	raft.peerState.replace(raftConfig.Peers)
 
 	util.RunWorker(raft.runApply, raft.handlePanic)
 	util.RunWorker(raft.run, raft.handlePanic)
@@ -113,7 +160,14 @@ func (s *raft) runApply() {
 		s.resetApply()
 	}()
 
+	loopCount := 0
 	for {
+		loopCount = loopCount + 1
+		if loopCount > 16 {
+			loopCount = 0
+			runtime.Gosched()
+		}
+
 		select {
 		case <-s.stopc:
 			return
@@ -155,9 +209,11 @@ func (s *raft) run() {
 	s.prevHardSt.Term = s.raftFsm.term
 	s.prevHardSt.Vote = s.raftFsm.vote
 	s.prevHardSt.Commit = s.raftFsm.raftLog.committed
+	s.maybeChange()
+
+	loopCount := 0
 	var readyc chan struct{}
 	for {
-		s.maybeChange()
 		if readyc == nil && s.containsUpdate() {
 			readyc = s.readyc
 			readyc <- struct{}{}
@@ -169,6 +225,7 @@ func (s *raft) run() {
 
 		case <-s.tickc:
 			s.raftFsm.tick()
+			s.maybeChange()
 
 		case pr := <-s.propc:
 			if s.raftFsm.leader != s.config.NodeID {
@@ -203,7 +260,8 @@ func (s *raft) run() {
 			s.raftFsm.Step(msg)
 
 		case m := <-s.recvc:
-			if _, ok := s.raftFsm.replicas[m.From]; ok || !m.IsResponseMsg() {
+			if _, ok := s.raftFsm.replicas[m.From]; ok || (!m.IsResponseMsg() && m.Type != proto.ReqMsgVote) ||
+				(m.Type == proto.ReqMsgVote && s.raftFsm.raftLog.isUpToDate(m.Index, m.LogTerm, 0, 0)) {
 				switch m.Type {
 				case proto.ReqMsgHeartBeat:
 					if s.raftFsm.leader == m.From && m.From != s.config.NodeID {
@@ -216,6 +274,9 @@ func (s *raft) run() {
 				default:
 					s.raftFsm.Step(m)
 				}
+				s.maybeChange()
+			} else if logger.IsEnableWarn() && m.Type != proto.RespMsgHeartBeat {
+				logger.Warn("[raft][%v term: %d] ignored a %s message without the replica from [%v term: %d].", s.raftFsm.id, s.raftFsm.term, m.Type, m.From, m.Term)
 			}
 
 		case snapReq := <-s.snapRecvc:
@@ -235,6 +296,11 @@ func (s *raft) run() {
 			}
 			s.raftFsm.msgs = nil
 			readyc = nil
+			loopCount = loopCount + 1
+			if loopCount >= 2 {
+				loopCount = 0
+				runtime.Gosched()
+			}
 
 		case <-s.electc:
 			msg := proto.GetMessage()
@@ -242,9 +308,24 @@ func (s *raft) run() {
 			msg.From = s.config.NodeID
 			msg.ForceVote = true
 			s.raftFsm.Step(msg)
+			s.maybeChange()
 
 		case c := <-s.statusc:
 			c <- s.getStatus()
+
+		case truncIndex := <-s.truncatec:
+			func() {
+				defer util.HandleCrash()
+
+				if lasti, err := s.raftConfig.Storage.LastIndex(); err != nil {
+					logger.Error("raft[%v] truncate failed to get last index from storage: %v", s.raftFsm.id, err)
+				} else if lasti > s.config.RetainLogs {
+					maxIndex := util.Min(truncIndex, lasti-s.config.RetainLogs)
+					if err = s.raftConfig.Storage.Truncate(maxIndex); err != nil {
+						logger.Error("raft[%v] truncate failed,error is: %v", s.raftFsm.id, err)
+					}
+				}
+			}()
 		}
 	}
 }
@@ -263,7 +344,7 @@ func (s *raft) tick() {
 }
 
 func (s *raft) propose(cmd []byte, future *Future) {
-	if s.leader() != s.config.NodeID {
+	if !s.isLeader() {
 		future.respond(nil, ErrNotLeader)
 		return
 	}
@@ -281,16 +362,15 @@ func (s *raft) propose(cmd []byte, future *Future) {
 }
 
 func (s *raft) proposeMemberChange(cc *proto.ConfChange, future *Future) {
-	if s.leader() != s.config.NodeID {
+	if !s.isLeader() {
 		future.respond(nil, ErrNotLeader)
 		return
 	}
 
 	pr := pool.getProposal()
 	pr.cmdType = proto.EntryConfChange
-	pr.data = make([]byte, cc.Size())
 	pr.future = future
-	cc.Marshal(pr.data)
+	pr.data = cc.Encode()
 
 	select {
 	case <-s.stopc:
@@ -345,36 +425,23 @@ func (s *raft) status() *Status {
 	}
 }
 
-func (s *raft) truncate(index uint64) error {
-	defer util.HandleCrash()
-
-	lasti, err := s.raftConfig.Storage.LastIndex()
-	if err != nil {
-		return fmt.Errorf("raft[%v] truncate failed to get last index from storage: %v", s.raftFsm.id, err)
+func (s *raft) truncate(index uint64) {
+	if s.restoringSnapshot.Get() {
+		return
 	}
 
-	if lasti <= s.config.RetainLogs {
-		return nil
+	select {
+	case <-s.stopc:
+	case s.truncatec <- index:
+	default:
+		return
 	}
-	maxIndex := util.Min(index, lasti-s.config.RetainLogs)
-	return s.raftConfig.Storage.Truncate(maxIndex)
-}
-
-func (s *raft) term() uint64 {
-	return s.curTerm.Get()
-}
-
-func (s *raft) leader() uint64 {
-	return s.curLeader.Get()
-}
-
-func (s *raft) applied() uint64 {
-	return s.curApplied.Get()
 }
 
 func (s *raft) tryToLeader(future *Future) {
-	if s.leader() == s.config.NodeID {
+	if s.restoringSnapshot.Get() {
 		future.respond(nil, nil)
+		return
 	}
 
 	select {
@@ -385,16 +452,40 @@ func (s *raft) tryToLeader(future *Future) {
 	}
 }
 
+func (s *raft) leaderTerm() (leader, term uint64) {
+	st := (*softState)(atomic.LoadPointer(&s.curSoftSt))
+	if st == nil {
+		return NoLeader, 0
+	}
+	return st.leader, st.term
+}
+
+func (s *raft) isLeader() bool {
+	leader, _ := s.leaderTerm()
+	return leader == s.config.NodeID
+}
+
+func (s *raft) applied() uint64 {
+	return s.curApplied.Get()
+}
+
+func (s *raft) sendMessage(m *proto.Message) {
+	s.config.transport.Send(m)
+}
+
 func (s *raft) maybeChange() {
-	if s.curTerm.Get() != s.raftFsm.term {
-		s.curTerm.Set(s.raftFsm.term)
+	updated := false
+	if s.prevSoftSt.term != s.raftFsm.term {
+		updated = true
+		s.prevSoftSt.term = s.raftFsm.term
 		s.resetTick()
 	}
-	preLeader := s.curLeader.Get()
+	preLeader := s.prevSoftSt.leader
 	if preLeader != s.raftFsm.leader {
-		s.curLeader.Set(s.raftFsm.leader)
-		s.resetPending(ErrNotLeader)
+		updated = true
+		s.prevSoftSt.leader = s.raftFsm.leader
 		if s.raftFsm.leader != s.config.NodeID {
+			s.resetPending(ErrNotLeader)
 			s.stopSnapping()
 		}
 		if logger.IsEnableWarn() {
@@ -408,6 +499,11 @@ func (s *raft) maybeChange() {
 				logger.Warn("raft:[%v] lost leader %v at term %d.", s.raftFsm.id, preLeader, s.raftFsm.term)
 			}
 		}
+
+		s.raftConfig.StateMachine.HandleLeaderChange(s.raftFsm.leader)
+	}
+	if updated {
+		atomic.StorePointer(&s.curSoftSt, unsafe.Pointer(&softState{leader: s.raftFsm.leader, term: s.raftFsm.term}))
 	}
 }
 
@@ -420,7 +516,7 @@ func (s *raft) persist() {
 	}
 	if s.raftFsm.raftLog.committed != s.prevHardSt.Commit || s.raftFsm.term != s.prevHardSt.Term || s.raftFsm.vote != s.prevHardSt.Vote {
 		hs := proto.HardState{Term: s.raftFsm.term, Vote: s.raftFsm.vote, Commit: s.raftFsm.raftLog.committed}
-		if err := s.raftConfig.Storage.StoreHardState(&hs); err != nil {
+		if err := s.raftConfig.Storage.StoreHardState(hs); err != nil {
 			panic(AppPanicError(fmt.Sprintf("[raft->persist][%v] storage storeHardState err: [%v].", s.raftFsm.id, err)))
 		}
 		s.prevHardSt = hs
@@ -428,7 +524,7 @@ func (s *raft) persist() {
 }
 
 func (s *raft) apply() {
-	committedEntries := s.raftFsm.raftLog.nextEnts()
+	committedEntries := s.raftFsm.raftLog.nextEnts(noLimit)
 	for _, entry := range committedEntries {
 		apply := pool.getApply()
 		apply.term = entry.Term
@@ -447,10 +543,11 @@ func (s *raft) apply() {
 
 		case proto.EntryConfChange:
 			cc := new(proto.ConfChange)
-			cc.UnMarshal(entry.Data)
+			cc.Decode(entry.Data)
 			apply.command = cc
 			// repl apply
 			s.raftFsm.applyConfChange(cc)
+			s.peerState.change(cc)
 			if logger.IsEnableWarn() {
 				logger.Warn("raft[%v] applying configuration change %v.", s.raftFsm.id, cc)
 			}
@@ -471,10 +568,6 @@ func (s *raft) advance() {
 	if len(entries) > 0 {
 		s.raftFsm.raftLog.stableTo(entries[len(entries)-1].Index, entries[len(entries)-1].Term)
 	}
-}
-
-func (s *raft) sendMessage(m *proto.Message) {
-	s.config.transport.Send(m)
 }
 
 func (s *raft) containsUpdate() bool {
@@ -548,121 +641,6 @@ func (s *raft) getStatus() *Status {
 	return st
 }
 
-func (s *raft) addSnapping(nodeId uint64, rs *snapshotResult) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if snap, ok := s.snapping[nodeId]; ok {
-		close(snap.stopCh)
-	}
-	s.snapping[nodeId] = rs
-}
-
-func (s *raft) removeSnapping(nodeId uint64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if snap, ok := s.snapping[nodeId]; ok {
-		close(snap.stopCh)
-		delete(s.snapping, nodeId)
-	}
-}
-
-func (s *raft) stopSnapping() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for id, snap := range s.snapping {
-		close(snap.stopCh)
-		delete(s.snapping, id)
-	}
-}
-
-func (s *raft) sendSnapshot(m *proto.Message) {
-	util.RunWorker(func() {
-		defer func() {
-			s.removeSnapping(m.To)
-			m.Snapshot.Close()
-			proto.ReturnMessage(m)
-		}()
-
-		// send snapshot
-		rs := newSnapshotResult()
-		s.addSnapping(m.To, rs)
-		s.config.transport.SendSnapshot(m, rs)
-		select {
-		case <-s.stopc:
-			return
-		case <-rs.stopCh:
-			return
-		case err := <-rs.error():
-			nmsg := proto.GetMessage()
-			nmsg.Type = proto.RespMsgSnapShot
-			nmsg.From = m.To
-			nmsg.Reject = (err != nil)
-			s.recvc <- nmsg
-		}
-	}, func(err interface{}) {
-		s.doStop()
-		s.handlePanic(err)
-	})
-}
-
-func (s *raft) handleSnapshot(req *snapshotRequest) {
-	s.restoringSnapshot.Set(true)
-	var err error
-	defer func() {
-		req.respond(err)
-		s.resetTick()
-		s.restoringSnapshot.Set(false)
-		pool.returnByteBuffer(req.buffer)
-		proto.ReturnMessage(req.header)
-	}()
-
-	// validate snapshot
-	if req.header.Term < s.raftFsm.term {
-		err = fmt.Errorf("raft %v [term: %d] ignored a snapshot message with lower term from %v [term: %d].", s.raftFsm.id, s.raftFsm.term, req.header.From, req.header.Term)
-		return
-	}
-	if req.header.Term > s.raftFsm.term || s.raftFsm.state != stateFollower {
-		s.raftFsm.becomeFollower(req.header.Term, req.header.From)
-		s.maybeChange()
-	}
-	if !s.raftFsm.checkSnapshot(req.header.SnapshotMeta) {
-		if logger.IsEnableWarn() {
-			logger.Warn("raft %v [commit: %d] ignored snapshot [index: %d, term: %d].", s.raftFsm.id, s.raftFsm.raftLog.committed, req.header.SnapshotMeta.Index, req.header.SnapshotMeta.Term)
-		}
-		nmsg := proto.GetMessage()
-		nmsg.Type = proto.RespMsgAppend
-		nmsg.To = req.header.From
-		nmsg.Index = s.raftFsm.raftLog.committed
-		s.raftFsm.send(nmsg)
-		return
-	}
-
-	// restore snapshot
-	s.raftConfig.Storage.Clear()
-	if err = s.raftConfig.StateMachine.ApplySnapshot(req); err != nil {
-		return
-	}
-	if err = s.raftConfig.Storage.ApplySnapshot(req.header.SnapshotMeta); err != nil {
-		return
-	}
-	s.raftFsm.restore(req.header.SnapshotMeta)
-	s.curApplied.Set(req.header.SnapshotMeta.Index)
-
-	// send snapshot response message
-	if logger.IsEnableDebug() {
-		logger.Warn("raft %v [commit: %d] restored snapshot [index: %d, term: %d]",
-			s.raftFsm.id, s.raftFsm.raftLog.committed, req.header.SnapshotMeta.Index, req.header.SnapshotMeta.Term)
-	}
-	nmsg := proto.GetMessage()
-	nmsg.Type = proto.RespMsgAppend
-	nmsg.To = req.header.From
-	nmsg.Index = s.raftFsm.raftLog.lastIndex()
-	s.raftFsm.send(nmsg)
-}
-
 func (s *raft) handlePanic(err interface{}) {
 	fatalStopc <- s.raftFsm.id
 
@@ -671,4 +649,8 @@ func (s *raft) handlePanic(err interface{}) {
 		Err: fmt.Errorf("raft[%v] occur panic error: [%v].", s.raftFsm.id, err),
 	}
 	s.raftConfig.StateMachine.HandleFatalEvent(fatal)
+}
+
+func (s *raft) getPeers() (peers []uint64) {
+	return s.peerState.get()
 }

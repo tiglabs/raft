@@ -16,15 +16,16 @@ const (
 )
 
 const (
-	defaultTickInterval    = 2000
+	defaultTickInterval    = time.Millisecond * 2000
 	defaultHeartbeatTick   = 1
 	defaultElectionTick    = 5
 	defaultInflightMsgs    = 128
-	defaultSizeReqBuffer   = 1024
+	defaultSizeReqBuffer   = 2048
 	defaultSizeAppBuffer   = 2048
 	defaultRetainLogs      = 20000
+	defaultSizeSendBuffer  = 10240
+	defaultReplConcurrency = 5
 	defaultSnapConcurrency = 10
-	defaultSizeSnapMsg     = 4 * MB
 	defaultSizePerMsg      = MB
 	defaultHeartbeatAddr   = ":3016"
 	defaultReplicateAddr   = ":2015"
@@ -82,9 +83,10 @@ type TransportConfig struct {
 	// ReplicateAddr is the Replation port.
 	// The default value is 2015.
 	ReplicateAddr string
-	// MaxSizeSnapMsg limits the max size of each snapshot message.
-	// The default value is 4M.
-	MaxSizeSnapMsg uint32
+	// 发送队列大小
+	SendBufferSize int
+	//复制并发数(node->node)
+	MaxReplConcurrency int
 	// MaxSnapConcurrency limits the max number of snapshot concurrency.
 	// The default value is 10.
 	MaxSnapConcurrency int
@@ -95,6 +97,8 @@ type TransportConfig struct {
 // ReplConfig contains the parameters to create a replication.
 type RaftConfig struct {
 	ID           uint64
+	Term         uint64
+	Leader       uint64
 	Applied      uint64
 	Peers        []proto.Peer
 	Storage      storage.Storage
@@ -116,7 +120,8 @@ func DefaultConfig() *Config {
 	}
 	conf.HeartbeatAddr = defaultHeartbeatAddr
 	conf.ReplicateAddr = defaultReplicateAddr
-	conf.MaxSizeSnapMsg = defaultSizeSnapMsg
+	conf.SendBufferSize = defaultSizeSendBuffer
+	conf.MaxReplConcurrency = defaultReplConcurrency
 	conf.MaxSnapConcurrency = defaultSnapConcurrency
 
 	return conf
@@ -130,20 +135,17 @@ func (c *Config) validate() error {
 	if c.TransportConfig.Resolver == nil {
 		return errors.New("Resolver is required!")
 	}
-	if c.TickInterval < 5*time.Millisecond {
-		return errors.New("TickInterval is too low!")
-	}
-	if c.MaxSizePerMsg > 256*MB {
+	if c.MaxSizePerMsg > 4*MB {
 		return errors.New("MaxSizePerMsg it too high!")
 	}
 	if c.MaxInflightMsgs > 1024 {
 		return errors.New("MaxInflightMsgs is too high!")
 	}
-	if c.MaxSizeSnapMsg > 256*MB {
-		return errors.New("MaxSizeSnapMsg is too high!")
-	}
 	if c.MaxSnapConcurrency > 256 {
 		return errors.New("MaxSnapConcurrency is too high!")
+	}
+	if c.MaxReplConcurrency > 256 {
+		return errors.New("MaxReplConcurrency is too high!")
 	}
 
 	if strings.TrimSpace(c.TransportConfig.HeartbeatAddr) == "" {
@@ -152,7 +154,7 @@ func (c *Config) validate() error {
 	if strings.TrimSpace(c.TransportConfig.ReplicateAddr) == "" {
 		c.TransportConfig.ReplicateAddr = defaultReplicateAddr
 	}
-	if c.TickInterval <= 0 {
+	if c.TickInterval < 5*time.Millisecond {
 		c.TickInterval = defaultTickInterval
 	}
 	if c.HeartbeatTick <= 0 {
@@ -173,14 +175,14 @@ func (c *Config) validate() error {
 	if c.AppBufferSize <= 0 {
 		c.AppBufferSize = defaultSizeAppBuffer
 	}
-	if c.RetainLogs <= 0 {
-		c.RetainLogs = defaultRetainLogs
-	}
-	if c.MaxSizeSnapMsg <= 0 {
-		c.MaxSizeSnapMsg = defaultSizeSnapMsg
-	}
 	if c.MaxSnapConcurrency <= 0 {
 		c.MaxSnapConcurrency = defaultSnapConcurrency
+	}
+	if c.MaxReplConcurrency <= 0 {
+		c.MaxReplConcurrency = defaultReplConcurrency
+	}
+	if c.SendBufferSize <= 0 {
+		c.SendBufferSize = defaultSizeSendBuffer
 	}
 
 	return nil
@@ -199,11 +201,6 @@ func (c *RaftConfig) validate() error {
 	}
 	if c.StateMachine == nil {
 		return errors.New("StateMachine is required!")
-	}
-	if lasti, err := c.Storage.LastIndex(); err != nil {
-		return err
-	} else if lasti == 0 {
-		c.Applied = 0
 	}
 
 	return nil

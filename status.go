@@ -4,6 +4,11 @@ import (
 	"fmt"
 )
 
+type DownReplica struct {
+	NodeID      uint64
+	DownSeconds int
+}
+
 type Status struct {
 	id                uint64
 	nodeID            uint64
@@ -20,6 +25,10 @@ type Status struct {
 	restoringSnapshot bool
 	state             fsmState
 	replicas          map[uint64]replica
+}
+
+func (s *Status) State() fsmState {
+	return s.state
 }
 
 func (s *Status) String() string {
@@ -39,7 +48,7 @@ func (s *Status) String() string {
 			if v.paused {
 				p = "true"
 			}
-			subj := fmt.Sprintf(`"%v":{"match":"%v","next":"%v","state":"%v","paused":"%v","inflight":"%v","active":"%v"},`, k, v.match, v.next, v.state.String(), p, v.count, v.active)
+			subj := fmt.Sprintf(`"%v":{"match":"%v","commit":"%v","next":"%v","state":"%v","paused":"%v","inflight":"%v","active":"%v"},`, k, v.match, v.committed, v.next, v.state.String(), p, v.count, v.active)
 			j += subj
 		}
 		j = j[:len(j)-1] + "}}"
