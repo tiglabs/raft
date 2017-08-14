@@ -105,6 +105,7 @@ func (ls *logEntryStorage) Entries(lo, hi uint64, maxSize uint64) (entries []*pr
 	var ent *proto.Entry
 	var lf *logEntryFile
 	i := lo
+	var size uint64
 	// 读取历史文件里的日志
 	for _, fn := range lfs {
 		if fn.index >= hi {
@@ -120,11 +121,12 @@ func (ls *logEntryStorage) Entries(lo, hi uint64, maxSize uint64) (entries []*pr
 			if err != nil {
 				return
 			}
-			entries = append(entries, ent)
-			i++
-			if i-lo >= maxSize || i >= hi {
+			size += ent.Size()
+			if i >= hi || size > maxSize {
 				return
 			}
+			entries = append(entries, ent)
+			i++
 		}
 	}
 
