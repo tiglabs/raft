@@ -224,6 +224,13 @@ func (s *Storage) ApplySnapshot(meta proto.SnapshotMeta) error {
 	}
 
 	var err error
+
+	// 更新commit位置
+	s.hardState.Commit = meta.Index
+	if err := s.metafile.SaveHardState(s.hardState); err != nil {
+		return err
+	}
+
 	if err = s.metafile.SaveTruncateMeta(tMeta); err != nil {
 		return err
 	}
