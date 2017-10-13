@@ -4,7 +4,6 @@ import (
 	"github.com/ipdcode/raft/proto"
 	"github.com/ipdcode/raft/util"
 )
-
 type MultiTransport struct {
 	heartbeat *heartbeatTransport
 	replicate *replicateTransport
@@ -35,7 +34,8 @@ func (t *MultiTransport) Stop() {
 }
 
 func (t *MultiTransport) Send(m *proto.Message) {
-	if m.IsElectionMsg() {
+	// if m.IsElectionMsg() {
+	if m.IsHeartbeatMsg() {
 		t.heartbeat.send(m)
 	} else {
 		t.replicate.send(m)
