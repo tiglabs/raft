@@ -104,6 +104,8 @@ type ConfChange struct {
 	Context []byte
 }
 
+type HeartbeatContext []uint64
+
 func (t MsgType) String() string {
 	switch t {
 	case 0:
@@ -185,6 +187,10 @@ func (m *Message) IsResponseMsg() bool {
 func (m *Message) IsElectionMsg() bool {
 	return m.Type == ReqMsgHeartBeat || m.Type == RespMsgHeartBeat || m.Type == ReqMsgVote || m.Type == RespMsgVote ||
 		m.Type == ReqMsgElectAck || m.Type == RespMsgElectAck || m.Type == LeaseMsgOffline || m.Type == LeaseMsgTimeout
+}
+
+func (m *Message) IsHeartbeatMsg() bool {
+	return m.Type == ReqMsgHeartBeat || m.Type == RespMsgHeartBeat
 }
 
 func (s *HardState) IsEmpty() bool {
