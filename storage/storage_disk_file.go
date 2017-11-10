@@ -7,7 +7,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/proto"
 )
 
 type LogFile struct {

@@ -3,8 +3,8 @@ package raft
 import (
 	"fmt"
 
-	"github.com/ipdcode/raft/logger"
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/logger"
+	"github.com/tigcode/raft/proto"
 )
 
 func (r *raftFsm) becomeCandidate() {

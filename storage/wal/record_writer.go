@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"os"
 
-	"github.com/ipdcode/raft/util"
-	"github.com/ipdcode/raft/util/bufalloc"
+	"github.com/tigcode/raft/util"
+	"github.com/tigcode/raft/util/bufalloc"
 )
 
 const initialBufferSize = 1024 * 32

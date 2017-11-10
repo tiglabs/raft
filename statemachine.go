@@ -1,7 +1,7 @@
 package raft
 
 import (
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/proto"
 )
 
 // The StateMachine interface is supplied by the application to persist/snapshot data of application.

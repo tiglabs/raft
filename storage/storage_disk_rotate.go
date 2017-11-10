@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/proto"
 )
 
 func (ds *DiskRotateStorage) getEntries(lo, hi uint64, maxSize uint64) (entries []*proto.Entry, isCompact bool, e error) { // [lo, hi]

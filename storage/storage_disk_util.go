@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/proto"
 )
 
 const (

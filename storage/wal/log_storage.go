@@ -8,8 +8,8 @@ import (
 
 	"math"
 
-	"github.com/ipdcode/raft/proto"
-	"github.com/ipdcode/raft/util/log"
+	"github.com/tigcode/raft/proto"
+	"github.com/tigcode/raft/util/log"
 )
 
 type logEntryStorage struct {

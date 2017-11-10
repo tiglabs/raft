@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/proto"
 )
 
 func (file *LogFile) loadLogFileMetaHead(buf []byte) error {

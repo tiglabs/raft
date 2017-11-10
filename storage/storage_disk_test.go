@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/proto"
 )
 
 const (
