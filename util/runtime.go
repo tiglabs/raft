@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/ipdcode/raft/logger"
+	"github.com/tigcode/raft/logger"
 )
 
 func HandleCrash(handlers ...func(interface{})) {

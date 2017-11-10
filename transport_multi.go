@@ -1,8 +1,8 @@
 package raft
 
 import (
-	"github.com/ipdcode/raft/proto"
-	"github.com/ipdcode/raft/util"
+	"github.com/tigcode/raft/proto"
+	"github.com/tigcode/raft/util"
 )
 type MultiTransport struct {
 	heartbeat *heartbeatTransport

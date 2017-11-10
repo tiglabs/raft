@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipdcode/raft/proto"
-	"github.com/ipdcode/raft/storage"
+	"github.com/tigcode/raft/proto"
+	"github.com/tigcode/raft/storage"
 )
 
 const (

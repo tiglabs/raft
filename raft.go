@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/ipdcode/raft/logger"
-	"github.com/ipdcode/raft/proto"
-	"github.com/ipdcode/raft/util"
+	"github.com/tigcode/raft/logger"
+	"github.com/tigcode/raft/proto"
+	"github.com/tigcode/raft/util"
 )
 
 type proposal struct {

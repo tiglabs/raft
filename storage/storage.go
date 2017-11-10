@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/proto"
 )
 
 // Storage is an interface that may be implemented by the application to retrieve log entries from storage.

@@ -3,8 +3,8 @@ package raft
 import (
 	"math"
 
-	"github.com/ipdcode/raft/logger"
-	"github.com/ipdcode/raft/proto"
+	"github.com/tigcode/raft/logger"
+	"github.com/tigcode/raft/proto"
 )
 
 func (r *raftFsm) becomeFollower(term, lead uint64) {

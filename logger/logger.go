@@ -3,7 +3,7 @@ package logger
 import (
 	"fmt"
 
-	"github.com/ipdcode/raft/util/log"
+	"github.com/tigcode/raft/util/log"
 )
 
 // Logger encapsulation the log interface.

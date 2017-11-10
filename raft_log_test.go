@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ipdcode/raft/proto"
-	"github.com/ipdcode/raft/storage"
+	"github.com/tigcode/raft/proto"
+	"github.com/tigcode/raft/storage"
 )
 
 func TestFindConflict(t *testing.T) {
