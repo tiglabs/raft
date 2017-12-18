@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tigcode/raft/logger"
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/logger"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/util"
 )
 
 var (

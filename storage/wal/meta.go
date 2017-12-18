@@ -6,8 +6,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/util/bufalloc"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/util/bufalloc"
 )
 
 type truncateMeta struct {

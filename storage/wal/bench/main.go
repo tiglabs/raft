@@ -9,8 +9,8 @@ import (
 
 	"fmt"
 
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/storage/wal"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/storage/wal"
 )
 
 var n = flag.Int("n", 100000, "requests")

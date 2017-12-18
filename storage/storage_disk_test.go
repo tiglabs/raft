@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/util"
 )
 
 const (

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 func TestMaybeLastIndex(t *testing.T) {

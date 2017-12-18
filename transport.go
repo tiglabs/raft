@@ -1,7 +1,7 @@
 package raft
 
 import (
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 type Transport interface {

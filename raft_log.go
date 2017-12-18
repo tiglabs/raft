@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/tigcode/raft/logger"
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/storage"
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/logger"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/storage"
+	"github.com/tiglabs/raft/util"
 )
 
 const noLimit = math.MaxUint64

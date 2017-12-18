@@ -7,8 +7,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/util/log"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/util/log"
 )
 
 type logEntryFile struct {

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigcode/raft/logger"
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/util/log"
+	"github.com/tiglabs/raft/logger"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/util/log"
 )
 
 // Storage the storage

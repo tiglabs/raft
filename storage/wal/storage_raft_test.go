@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tigcode/raft"
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft"
+	"github.com/tiglabs/raft/proto"
 )
 
 type raftAddr struct {

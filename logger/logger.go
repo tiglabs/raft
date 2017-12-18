@@ -3,7 +3,7 @@ package logger
 import (
 	"fmt"
 
-	"github.com/tigcode/raft/util/log"
+	"github.com/tiglabs/raft/util/log"
 )
 
 // Logger encapsulation the log interface.

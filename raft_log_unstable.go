@@ -3,8 +3,8 @@ package raft
 import (
 	"fmt"
 
-	"github.com/tigcode/raft/logger"
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft/logger"
+	"github.com/tiglabs/raft/proto"
 )
 
 // unstable temporary deposit the unpersistent log entries.It has log position i+unstable.offset.
