@@ -3,7 +3,7 @@ package bufalloc
 import (
 	"sync"
 
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/util"
 )
 
 const (

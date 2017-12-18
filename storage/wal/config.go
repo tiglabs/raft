@@ -1,6 +1,6 @@
 package wal
 
-import "github.com/tigcode/raft/util"
+import "github.com/tiglabs/raft/util"
 
 const (
 	DefaultFileCacheCapacity = 2

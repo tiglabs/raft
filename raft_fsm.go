@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/tigcode/raft/logger"
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft/logger"
+	"github.com/tiglabs/raft/proto"
 )
 
 // NoLeader is a placeholder nodeID used when there is no leader.

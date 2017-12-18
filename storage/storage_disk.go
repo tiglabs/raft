@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 type DiskRotateStorage struct {

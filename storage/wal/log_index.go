@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/tigcode/raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 const indexItemSize = 8 + 8 + 4

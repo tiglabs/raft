@@ -4,8 +4,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/util"
 )
 
 type heartbeatTransport struct {

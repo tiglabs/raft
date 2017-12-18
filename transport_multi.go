@@ -1,9 +1,10 @@
 package raft
 
 import (
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/util"
 )
+
 type MultiTransport struct {
 	heartbeat *heartbeatTransport
 	replicate *replicateTransport

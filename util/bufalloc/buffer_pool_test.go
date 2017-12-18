@@ -3,7 +3,7 @@ package bufalloc
 import (
 	"testing"
 
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/util"
 )
 
 func TestGetPoolNum(t *testing.T) {

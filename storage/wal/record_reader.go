@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/util"
 )
 
 // 初始化完成之后，读取记录只能调用ReadAt方法

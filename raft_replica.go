@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigcode/raft/proto"
-	"github.com/tigcode/raft/util"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/util"
 )
 
 // replication represents a follower’s progress of replicate in the view of the leader.
