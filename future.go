@@ -46,3 +46,6 @@ func (f *Future) Response() (resp interface{}, err error) {
 	resp = <-f.respCh
 	return
 }
+func (f *Future) AsyncResponse() (respCh <-chan interface{}, errCh <-chan error) {
+	return f.respCh, f.errCh
+}
