@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 func TestSnapFullNewServer(t *testing.T) {

@@ -61,7 +61,8 @@ type SnapshotMeta struct {
 type Peer struct {
 	Type     PeerType
 	Priority uint16
-	ID       uint64
+	ID       uint64 // NodeID
+	PeerID   uint64 // Replica ID, unique over all raft groups and all replicas in the same group
 }
 
 // HardState is the repl state,must persist to the storage.
@@ -173,7 +174,8 @@ func (t PeerType) String() string {
 }
 
 func (p Peer) String() string {
-	return fmt.Sprintf(`"nodeID":"%v","priority":"%v","type":"%v"`, p.ID, p.Priority, p.Type.String())
+	return fmt.Sprintf(`"nodeID":"%v","peerID":"%v","priority":"%v","type":"%v"`,
+		p.ID, p.PeerID, p.Priority, p.Type.String())
 }
 
 func (cc *ConfChange) String() string {

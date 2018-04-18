@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"raft"
-	"raft/proto"
-	"raft/storage"
+	"github.com/tiglabs/raft"
+	"github.com/tiglabs/raft/proto"
+	"github.com/tiglabs/raft/storage"
 )
 
 var (

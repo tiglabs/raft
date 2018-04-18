@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 func TestMemberWithNoLease(t *testing.T) {

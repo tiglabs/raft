@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 func TestWithoutLeaseAndDown(t *testing.T) {

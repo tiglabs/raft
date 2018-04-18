@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"raft/proto"
+	"github.com/tiglabs/raft/proto"
 )
 
 const (

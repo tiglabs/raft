@@ -249,6 +249,17 @@ func (r *raftFsm) addPeer(peer proto.Peer) {
 
 func (r *raftFsm) removePeer(peer proto.Peer) {
 	r.pendingConf = false
+
+	replica, ok := r.replicas[peer.ID]
+	if !ok {
+		return
+	} else if replica.peer.PeerID != peer.PeerID {
+		if logger.IsEnableInfo() {
+			logger.Info("raft[%v] ignore remove peer[%v], current[%v]", r.id, peer.String(), replica.peer.String())
+		}
+		return
+	}
+
 	delete(r.replicas, peer.ID)
 
 	if peer.ID == r.config.NodeID {

@@ -8,8 +8,8 @@ import (
 	"io"
 	"sync"
 
-	"raft"
-	"raft/proto"
+	"github.com/tiglabs/raft"
+	"github.com/tiglabs/raft/proto"
 )
 
 var errNotExists = errors.New("Key not exists.")
@@ -71,7 +71,7 @@ func (ms *memoryStatemachine) Snapshot() (proto.Snapshot, error) {
 	}
 }
 
-func (ms *memoryStatemachine) ApplySnapshot(iter proto.SnapIterator) error {
+func (ms *memoryStatemachine) ApplySnapshot(peers []proto.Peer, iter proto.SnapIterator) error {
 	ms.Lock()
 	defer ms.Unlock()
 
@@ -148,6 +148,8 @@ func (ms *memoryStatemachine) setApplied(index uint64) {
 	defer ms.Unlock()
 	ms.applied = index
 }
+
+func (ms *memoryStatemachine) HandleLeaderChange(leader uint64) {}
 
 type memorySnapshot struct {
 	offset  int
