@@ -31,20 +31,21 @@ func newFuture() *Future {
 }
 
 func (f *Future) respond(resp interface{}, err error) {
-	f.deferError.respond(err)
 	if err == nil {
 		f.respCh <- resp
+		close(f.respCh)
+	} else {
+		f.deferError.respond(err)
 	}
-	close(f.respCh)
 }
 
 func (f *Future) Response() (resp interface{}, err error) {
-	err = <-f.error()
-	if err != nil {
+	select {
+	case err = <-f.error():
+		return
+	case resp = <-f.respCh:
 		return
 	}
-	resp = <-f.respCh
-	return
 }
 func (f *Future) AsyncResponse() (respCh <-chan interface{}, errCh <-chan error) {
 	return f.respCh, f.errCh
