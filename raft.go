@@ -409,10 +409,10 @@ func (s *raft) reciveSnapshot(m *snapshotRequest) {
 func (s *raft) status() *Status {
 	if s.restoringSnapshot.Get() {
 		return &Status{
-			id:                s.raftFsm.id,
-			nodeID:            s.config.NodeID,
-			restoringSnapshot: true,
-			state:             stateFollower,
+			ID:                s.raftFsm.id,
+			NodeID:            s.config.NodeID,
+			RestoringSnapshot: true,
+			State:             stateFollower.String(),
 		}
 	}
 
@@ -617,25 +617,35 @@ func (s *raft) getStatus() *Status {
 	}
 
 	st := &Status{
-		id:                s.raftFsm.id,
-		nodeID:            s.config.NodeID,
-		leader:            s.raftFsm.leader,
-		term:              s.raftFsm.term,
-		index:             s.raftFsm.raftLog.lastIndex(),
-		commit:            s.raftFsm.raftLog.committed,
-		applied:           s.curApplied.Get(),
-		vote:              s.raftFsm.vote,
-		state:             s.raftFsm.state,
-		restoringSnapshot: s.restoringSnapshot.Get(),
-		pendQueue:         len(s.pending),
-		recvQueue:         len(s.recvc),
-		appQueue:          len(s.applyc),
-		stopped:           stopped,
+		ID:                s.raftFsm.id,
+		NodeID:            s.config.NodeID,
+		Leader:            s.raftFsm.leader,
+		Term:              s.raftFsm.term,
+		Index:             s.raftFsm.raftLog.lastIndex(),
+		Commit:            s.raftFsm.raftLog.committed,
+		Applied:           s.curApplied.Get(),
+		Vote:              s.raftFsm.vote,
+		State:             s.raftFsm.state.String(),
+		RestoringSnapshot: s.restoringSnapshot.Get(),
+		PendQueue:         len(s.pending),
+		RecvQueue:         len(s.recvc),
+		AppQueue:          len(s.applyc),
+		Stopped:           stopped,
 	}
-	if st.state == stateLeader {
-		st.replicas = make(map[uint64]replica)
+	if s.raftFsm.state == stateLeader {
+		st.Replicas = make(map[uint64]*ReplicaStatus)
 		for id, p := range s.raftFsm.replicas {
-			st.replicas[id] = *p
+			st.Replicas[id] = &ReplicaStatus{
+				Match:       p.match,
+				Commit:      p.committed,
+				Next:        p.next,
+				State:       p.state.String(),
+				Snapshoting: p.state == replicaStateSnapshot,
+				Paused:      p.paused,
+				Active:      p.active,
+				LastActive:  p.lastActive,
+				Inflight:    p.count,
+			}
 		}
 	}
 	return st

@@ -187,9 +187,9 @@ func (rs *RaftServer) Status(id uint64) (status *Status) {
 	}
 	if status == nil {
 		status = &Status{
-			id:      id,
-			nodeID:  rs.config.NodeID,
-			stopped: true,
+			ID:      id,
+			NodeID:  rs.config.NodeID,
+			Stopped: true,
 		}
 	}
 	return
@@ -272,12 +272,12 @@ func (rs *RaftServer) GetDownReplicas(id uint64) (downReplicas []DownReplica) {
 	}
 
 	status := raft.status()
-	if status != nil && len(status.replicas) > 0 {
-		for n, r := range status.replicas {
+	if status != nil && len(status.Replicas) > 0 {
+		for n, r := range status.Replicas {
 			if n == rs.config.NodeID {
 				continue
 			}
-			since := time.Since(r.lastActive)
+			since := time.Since(r.LastActive)
 			// 两次心跳内没活跃就视为Down
 			downDuration := since - time.Duration(2*rs.config.HeartbeatTick)*rs.config.TickInterval
 			if downDuration > 0 {
@@ -302,12 +302,12 @@ func (rs *RaftServer) GetPendingReplica(id uint64) (peers []uint64) {
 	}
 
 	status := raft.status()
-	if status != nil && len(status.replicas) > 0 {
-		for n, r := range status.replicas {
+	if status != nil && len(status.Replicas) > 0 {
+		for n, r := range status.Replicas {
 			if n == rs.config.NodeID {
 				continue
 			}
-			if r.state == replicaStateSnapshot {
+			if r.Snapshoting {
 				peers = append(peers, n)
 			}
 		}
