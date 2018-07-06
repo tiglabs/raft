@@ -209,7 +209,7 @@ func (s *raft) run() {
 	s.prevHardSt.Term = s.raftFsm.term
 	s.prevHardSt.Vote = s.raftFsm.vote
 	s.prevHardSt.Commit = s.raftFsm.raftLog.committed
-	s.maybeChange()
+	s.maybeChange(true)
 
 	loopCount := 0
 	var readyc chan struct{}
@@ -225,7 +225,7 @@ func (s *raft) run() {
 
 		case <-s.tickc:
 			s.raftFsm.tick()
-			s.maybeChange()
+			s.maybeChange(true)
 
 		case pr := <-s.propc:
 			if s.raftFsm.leader != s.config.NodeID {
@@ -274,7 +274,11 @@ func (s *raft) run() {
 				default:
 					s.raftFsm.Step(m)
 				}
-				s.maybeChange()
+				var respErr bool = true
+				if m.Type == proto.RespMsgAppend && m.Reject != true {
+					respErr = false
+				}
+				s.maybeChange(respErr)
 			} else if logger.IsEnableWarn() && m.Type != proto.RespMsgHeartBeat {
 				logger.Warn("[raft][%v term: %d] ignored a %s message without the replica from [%v term: %d].", s.raftFsm.id, s.raftFsm.term, m.Type, m.From, m.Term)
 			}
@@ -308,7 +312,7 @@ func (s *raft) run() {
 			msg.From = s.config.NodeID
 			msg.ForceVote = true
 			s.raftFsm.Step(msg)
-			s.maybeChange()
+			s.maybeChange(true)
 
 		case c := <-s.statusc:
 			c <- s.getStatus()
@@ -473,7 +477,7 @@ func (s *raft) sendMessage(m *proto.Message) {
 	s.config.transport.Send(m)
 }
 
-func (s *raft) maybeChange() {
+func (s *raft) maybeChange(respErr bool) {
 	updated := false
 	if s.prevSoftSt.term != s.raftFsm.term {
 		updated = true
@@ -485,7 +489,9 @@ func (s *raft) maybeChange() {
 		updated = true
 		s.prevSoftSt.leader = s.raftFsm.leader
 		if s.raftFsm.leader != s.config.NodeID {
-			s.resetPending(ErrNotLeader)
+			if respErr == true {
+				s.resetPending(ErrNotLeader)
+			}
 			s.stopSnapping()
 		}
 		if logger.IsEnableWarn() {

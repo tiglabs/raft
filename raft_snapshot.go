@@ -151,7 +151,7 @@ func (s *raft) handleSnapshot(req *snapshotRequest) {
 	}
 	if req.header.Term > s.raftFsm.term || s.raftFsm.state != stateFollower {
 		s.raftFsm.becomeFollower(req.header.Term, req.header.From)
-		s.maybeChange()
+		s.maybeChange(true)
 	}
 	if !s.raftFsm.checkSnapshot(req.header.SnapshotMeta) {
 		if logger.IsEnableWarn() {

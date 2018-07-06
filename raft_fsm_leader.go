@@ -151,6 +151,7 @@ func stepLeader(r *raftFsm, m *proto.Message) {
 			nmsg.To = id
 			r.send(nmsg)
 		}
+		logger.Debug("[raft][%v] LeaseMsgOffline at term[%d] leader[%d].", r.id, r.term, r.leader)
 		r.becomeFollower(r.term, NoLeader)
 		proto.ReturnMessage(m)
 		return
@@ -190,6 +191,8 @@ func (r *raftFsm) becomeElectionAck() {
 		r.becomeLeader()
 		return
 	}
+
+	logger.Debug("raft[%v] became election at term %d.", r.id, r.term)
 
 	r.step = stepElectionAck
 	r.reset(r.term, 0, false)
@@ -266,6 +269,7 @@ func (r *raftFsm) tickHeartbeat() {
 			if logger.IsEnableWarn() {
 				logger.Warn("raft[%v] stepped down to follower since quorum is not active.", r.id)
 			}
+			logger.Debug("[raft][%v] heartbeat election timeout at term[%d] leader[%d].", r.id, r.term, r.leader)
 			r.becomeFollower(r.term, NoLeader)
 		}
 	}

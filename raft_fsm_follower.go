@@ -14,7 +14,7 @@ func (r *raftFsm) becomeFollower(term, lead uint64) {
 	r.leader = lead
 	r.state = stateFollower
 	if logger.IsEnableDebug() {
-		logger.Debug("[raft][%v] became follower at term[%d].", r.id, r.term)
+		logger.Debug("[raft][%v] became follower at term[%d] leader[%d].", r.id, r.term, r.leader)
 	}
 }
 
