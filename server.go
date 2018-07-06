@@ -316,33 +316,43 @@ func (rs *RaftServer) GetPendingReplica(id uint64) (peers []uint64) {
 }
 
 func (rs *RaftServer) sendHeartbeat() {
-	nodes := make(map[uint64]struct{})
+	// key: sendto nodeId; value: range ids
+	nodes := make(map[uint64]proto.HeartbeatContext)
 	rs.mu.RLock()
-	for _, raft := range rs.rafts {
+	for id, raft := range rs.rafts {
+		if !raft.isLeader() {
+			continue
+		}
 		peers := raft.getPeers()
 		for _, p := range peers {
-			nodes[p] = struct{}{}
+			nodes[p] = append(nodes[p], id)
 		}
 	}
 	rs.mu.RUnlock()
 
-	for nodeID := range nodes {
-		if nodeID == rs.config.NodeID {
+	for to, ctx := range nodes {
+		if to == rs.config.NodeID {
 			continue
 		}
 
 		msg := proto.GetMessage()
 		msg.Type = proto.ReqMsgHeartBeat
 		msg.From = rs.config.NodeID
-		msg.To = nodeID
+		msg.To = to
+		msg.Context = proto.EncodeHBConext(ctx)
 		rs.config.transport.Send(msg)
 	}
 }
 
 func (rs *RaftServer) handleHeartbeat(m *proto.Message) {
+	ctx := proto.DecodeHBContext(m.Context)
+	var respCtx proto.HeartbeatContext
 	rs.mu.RLock()
-	for _, raft := range rs.rafts {
-		raft.reciveMessage(m)
+	for _, id := range ctx {
+		if raft, ok := rs.rafts[id]; ok {
+			raft.reciveMessage(m)
+			respCtx = append(respCtx, id)
+		}
 	}
 	rs.mu.RUnlock()
 
@@ -350,15 +360,20 @@ func (rs *RaftServer) handleHeartbeat(m *proto.Message) {
 	msg.Type = proto.RespMsgHeartBeat
 	msg.From = rs.config.NodeID
 	msg.To = m.From
+	msg.Context = proto.EncodeHBConext(respCtx)
 	rs.config.transport.Send(msg)
 }
 
 func (rs *RaftServer) handleHeartbeatResp(m *proto.Message) {
+	ctx := proto.DecodeHBContext(m.Context)
+
 	rs.mu.RLock()
 	defer rs.mu.RUnlock()
 
-	for _, raft := range rs.rafts {
-		raft.reciveMessage(m)
+	for _, id := range ctx {
+		if raft, ok := rs.rafts[id]; ok {
+			raft.reciveMessage(m)
+		}
 	}
 }
 
