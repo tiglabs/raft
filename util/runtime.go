@@ -3,12 +3,14 @@ package util
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/tiglabs/raft/logger"
 )
 
 func HandleCrash(handlers ...func(interface{})) {
 	if r := recover(); r != nil {
+		debug.PrintStack()
 		logPanic(r)
 		for _, fn := range handlers {
 			fn(r)
