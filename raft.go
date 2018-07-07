@@ -489,7 +489,7 @@ func (s *raft) maybeChange(respErr bool) {
 		updated = true
 		s.prevSoftSt.leader = s.raftFsm.leader
 		if s.raftFsm.leader != s.config.NodeID {
-			if respErr == true {
+			if respErr == true || preLeader != s.config.NodeID {
 				s.resetPending(ErrNotLeader)
 			}
 			s.stopSnapping()
