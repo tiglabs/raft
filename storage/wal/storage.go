@@ -238,9 +238,9 @@ func (s *Storage) ApplySnapshot(meta proto.SnapshotMeta) error {
 		return err
 	}
 
-	//if err = s.ls.TruncateAll(); err != nil {
-	//	return err
-	//}
+	if err = s.ls.TruncateAll(); err != nil {
+		return err
+	}
 
 	s.truncIndex = meta.Index
 	s.truncTerm = meta.Term
