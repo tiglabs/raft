@@ -473,6 +473,10 @@ func (s *raft) applied() uint64 {
 	return s.curApplied.Get()
 }
 
+func (s *raft) committed() uint64 {
+	return s.raftFsm.raftLog.committed
+}
+
 func (s *raft) sendMessage(m *proto.Message) {
 	s.config.transport.Send(m)
 }
