@@ -1,6 +1,14 @@
 # raft
-an implementation of raft in Go
 
-## thanks
+A multi-raft implementation based on the [coreos/etcd](https://github.com/coreos/etcd) raft library.
 
-this raft library was inspired by and built on etcd/raft and hashicorp/raft. thanks for their excellent work. 
+
+## features  
+- multi-raft support    
+- snapshopt manager   
+- merged and compressed heartbeat message    
+- check down replica      
+- single raft's panic is allowed, detectable  
+- new wal implementation    
+- export more run status    
+- implementation batch commit
