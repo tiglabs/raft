@@ -2,16 +2,18 @@ CoreOS Project
 Copyright 2014 CoreOS, Inc
 This product includes software developed at CoreOS, Inc. (http://www.coreos.com/).
 
- Copyright 2018 The TigLabs raft Authors
+Copyright 2018 The tiglabs Authors
 
-This etc/raft code has been modified to add features and support for
-- multi-raft support
-- snapshopt manager
-- merged and compressed heartbeat message
-- check down replica
-- single raft's panic is allowed, detectable
-- new wal implementation
-- export more run status
-- implementation batch commit
+This etc/raft code has been modified to add following features:
 
-,licensed under the Apache License, Version 2.0. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+1. multi-raft support.
+2. snapshot manager.
+3. merged and compressed heartbeat message.
+4. check down replica.
+5. single raft's panic is allowed, detectable.
+6. new wal implementation.
+7. export more run status.
+8. implementation batch commit.
+
+Licensed under the Apache License, Version 2.0. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+
