@@ -1,6 +1,5 @@
 # raft
-
-A multi-raft implementation based on the [coreos/etcd](https://github.com/coreos/etcd) raft library.
+A multi-raft implementation built on top of the CoreOS etcd raft library  [coreos/etcd](https://github.com/coreos/etcd)
 
 
 ## features  
