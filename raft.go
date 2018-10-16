@@ -471,6 +471,14 @@ func (s *raft) tryToLeader(future *Future) {
 	}
 }
 
+func (s *raft) transferLeader(leader, to uint64, future *Future) {
+	select {
+	case <-s.stopc:
+		future.respond(nil, ErrStopped)
+	case s.recvc <- :
+	}
+}
+
 func (s *raft) leaderTerm() (leader, term uint64) {
 	st := (*softState)(atomic.LoadPointer(&s.curSoftSt))
 	if st == nil {

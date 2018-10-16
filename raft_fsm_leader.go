@@ -65,6 +65,10 @@ func stepLeader(r *raftFsm, m *proto.Message) {
 		if _, ok := r.replicas[r.config.NodeID]; !ok || len(m.Entries) == 0 {
 			return
 		}
+		if r.leadTransferee != 0 {
+			logger.Debugf("raft[%v] [term %d] transfer leadership to %x is in progress; dropping proposal", r.id, r.Term, r.leadTransferee)
+			return
+		}
 
 		for i, e := range m.Entries {
 			if e.Type == proto.EntryConfChange {

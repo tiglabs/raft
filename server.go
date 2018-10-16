@@ -242,6 +242,7 @@ func (rs *RaftServer) AppliedIndex(id uint64) uint64 {
 	return 0
 }
 
+// CommittedIndex return commit commit index
 func (rs *RaftServer) CommittedIndex(id uint64) uint64 {
 	rs.mu.RLock()
 	raft, ok := rs.rafts[id]
@@ -253,6 +254,7 @@ func (rs *RaftServer) CommittedIndex(id uint64) uint64 {
 	return 0
 }
 
+// TryToLeader start a new election and try to be elected to leader
 func (rs *RaftServer) TryToLeader(id uint64) (future *Future) {
 	rs.mu.RLock()
 	raft, ok := rs.rafts[id]
@@ -267,6 +269,22 @@ func (rs *RaftServer) TryToLeader(id uint64) (future *Future) {
 	return
 }
 
+// TransferLeader attempts to transfer leadership from {leader} the {to}
+func (rs *RaftServer) TransferLeader(id uint64, leader uint64, to uint64) (future *Future) {
+	rs.mu.RLock()
+	raft, ok := rs.rafts[id]
+	rs.mu.RUnlock()
+
+	future = newFuture()
+	if !ok {
+		future.respond(nil, ErrRaftNotExists)
+		return
+	}
+	raft.transferLeader(leader, to, future)
+	return
+}
+
+// Truncate truncate raft log to {index}
 func (rs *RaftServer) Truncate(id uint64, index uint64) {
 	rs.mu.RLock()
 	raft, ok := rs.rafts[id]

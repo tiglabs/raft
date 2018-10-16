@@ -37,6 +37,9 @@ type raftFsm struct {
 	leader           uint64
 	electionElapsed  int
 	heartbeatElapsed int
+	// leadTransferee is id of the leader transfer target when its value is not zero.
+	// Follow the procedure defined in raft thesis 3.10.
+	leadTransferee uint64
 	// randElectionTick is a random number between[electiontimetick, 2 * electiontimetick - 1].
 	// It gets reset when raft changes its state to follower or candidate.
 	randElectionTick int
