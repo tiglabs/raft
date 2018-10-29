@@ -40,6 +40,14 @@ type apply struct {
 	command interface{}
 }
 
+// handle user's get log entries request
+type entryRequest struct {
+	future     *Future
+	index      uint64
+	maxSize    uint64
+	onlyCommit bool
+}
+
 type softState struct {
 	leader uint64
 	term   uint64
@@ -100,6 +108,7 @@ type raft struct {
 	snapRecvc         chan *snapshotRequest
 	truncatec         chan uint64
 	statusc           chan chan *Status
+	entryRequestC     chan *entryRequest
 	readyc            chan struct{}
 	tickc             chan struct{}
 	electc            chan struct{}
@@ -121,22 +130,23 @@ func newRaft(config *Config, raftConfig *RaftConfig) (*raft, error) {
 	}
 
 	raft := &raft{
-		raftFsm:    r,
-		config:     config,
-		raftConfig: raftConfig,
-		pending:    make(map[uint64]*Future),
-		snapping:   make(map[uint64]*snapshotStatus),
-		recvc:      make(chan *proto.Message, config.ReqBufferSize),
-		applyc:     make(chan *apply, config.AppBufferSize),
-		propc:      make(chan *proposal, 256),
-		snapRecvc:  make(chan *snapshotRequest, 1),
-		truncatec:  make(chan uint64, 1),
-		statusc:    make(chan chan *Status, 1),
-		tickc:      make(chan struct{}, 64),
-		readyc:     make(chan struct{}, 1),
-		electc:     make(chan struct{}, 1),
-		stopc:      make(chan struct{}),
-		done:       make(chan struct{}),
+		raftFsm:       r,
+		config:        config,
+		raftConfig:    raftConfig,
+		pending:       make(map[uint64]*Future),
+		snapping:      make(map[uint64]*snapshotStatus),
+		recvc:         make(chan *proto.Message, config.ReqBufferSize),
+		applyc:        make(chan *apply, config.AppBufferSize),
+		propc:         make(chan *proposal, 256),
+		snapRecvc:     make(chan *snapshotRequest, 1),
+		truncatec:     make(chan uint64, 1),
+		statusc:       make(chan chan *Status, 1),
+		entryRequestC: make(chan *entryRequest, 1),
+		tickc:         make(chan struct{}, 64),
+		readyc:        make(chan struct{}, 1),
+		electc:        make(chan struct{}, 1),
+		stopc:         make(chan struct{}),
+		done:          make(chan struct{}),
 	}
 	raft.curApplied.Set(r.raftLog.applied)
 	raft.peerState.replace(raftConfig.Peers)
@@ -345,6 +355,9 @@ func (s *raft) run() {
 					}
 				}
 			}()
+
+		case req := <-s.entryRequestC:
+			s.getEntriesInLoop(req)
 		}
 	}
 }
@@ -681,11 +694,48 @@ func (s *raft) handlePanic(err interface{}) {
 
 	fatal := &FatalError{
 		ID:  s.raftFsm.id,
-		Err: fmt.Errorf("raft[%v] occur panic error: [%v].", s.raftFsm.id, err),
+		Err: fmt.Errorf("raft[%v] occur panic error: [%v]", s.raftFsm.id, err),
 	}
 	s.raftConfig.StateMachine.HandleFatalEvent(fatal)
 }
 
 func (s *raft) getPeers() (peers []uint64) {
 	return s.peerState.get()
+}
+
+func (s *raft) getEntries(future *Future, startIndex uint64, maxSize uint64) {
+	req := &entryRequest{
+		future:  future,
+		index:   startIndex,
+		maxSize: maxSize,
+	}
+	select {
+	case <-s.stopc:
+		future.respond(nil, ErrStopped)
+	case s.entryRequestC <- req:
+	}
+}
+
+func (s *raft) getEntriesInLoop(req *entryRequest) {
+	select {
+	case <-s.stopc:
+		req.future.respond(nil, ErrStopped)
+		return
+	default:
+	}
+
+	if !s.isLeader() {
+		req.future.respond(nil, ErrNotLeader)
+		return
+	}
+	if req.index > s.raftFsm.raftLog.lastIndex() {
+		req.future.respond(nil, ErrNoMoreData)
+		return
+	}
+	if req.index < s.raftFsm.raftLog.firstIndex() {
+		req.future.respond(nil, ErrCompacted)
+		return
+	}
+	entries, err := s.raftFsm.raftLog.entries(req.index, req.maxSize)
+	req.future.respond(entries, err)
 }

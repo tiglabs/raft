@@ -26,6 +26,7 @@ var (
 	ErrNotLeader     = errors.New("raft is not the leader.")
 	ErrStopped       = errors.New("raft is already shutdown.")
 	ErrSnapping      = errors.New("raft is doing snapshot.")
+	ErrNoMoreData    = errors.New("no more data")
 )
 
 type FatalError struct {
