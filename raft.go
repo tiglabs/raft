@@ -99,6 +99,7 @@ type raft struct {
 	recvc             chan *proto.Message
 	snapRecvc         chan *snapshotRequest
 	truncatec         chan uint64
+	readIndexC        chan *Future
 	statusc           chan chan *Status
 	readyc            chan struct{}
 	tickc             chan struct{}
@@ -131,6 +132,7 @@ func newRaft(config *Config, raftConfig *RaftConfig) (*raft, error) {
 		propc:      make(chan *proposal, 256),
 		snapRecvc:  make(chan *snapshotRequest, 1),
 		truncatec:  make(chan uint64, 1),
+		readIndexC: make(chan *Future, 256),
 		statusc:    make(chan chan *Status, 1),
 		tickc:      make(chan struct{}, 64),
 		readyc:     make(chan struct{}, 1),
@@ -345,7 +347,25 @@ func (s *raft) run() {
 					}
 				}
 			}()
+
+		case future := <-s.readIndexC:
+			futures := []*Future{future}
+			// handle in batch
+			var flag bool
+			for i := 1; i < 64; i++ {
+				select {
+				case f := <-s.readIndexC:
+					futures = append(futures, f)
+				default:
+					flag = true
+				}
+				if flag {
+					break
+				}
+			}
+			s.handleReadIndex(futures)
 		}
+
 	}
 }
 
@@ -688,4 +708,36 @@ func (s *raft) handlePanic(err interface{}) {
 
 func (s *raft) getPeers() (peers []uint64) {
 	return s.peerState.get()
+}
+
+func (s *raft) readIndex(future *Future) {
+	if !s.isLeader() {
+		future.respond(nil, ErrNotLeader)
+		return
+	}
+
+	select {
+	case <-s.stopc:
+		future.respond(nil, ErrStopped)
+	case s.readIndexC <- future:
+	}
+}
+
+func (s *raft) handleReadIndex(futures []*Future) {
+	// not leader
+	if s.raftFsm.leader != s.config.NodeID {
+		for _, f := range futures {
+			f.respond(nil, ErrNotLeader)
+		}
+		return
+	}
+
+	// no commit log in current leader's term
+	raftLog := s.raftFsm.raftLog
+	if raftLog.zeroTermOnErrCompacted(raftLog.term(raftLog.committed)) != s.raftFsm.term {
+		for _, f := range futures {
+			f.respond(nil, ErrRetryLater)
+		}
+		return
+	}
 }
