@@ -16,7 +16,6 @@
 package raft
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -50,6 +49,7 @@ type raftFsm struct {
 	votes       map[uint64]bool
 	acks        map[uint64]bool
 	replicas    map[uint64]*replica
+	readOnly    *readOnly
 	msgs        []*proto.Message
 	step        stepFunc
 	tick        func()
@@ -72,6 +72,7 @@ func newRaftFsm(config *Config, raftConfig *RaftConfig) (*raftFsm, error) {
 		leader:   NoLeader,
 		raftLog:  raftlog,
 		replicas: make(map[uint64]*replica),
+		readOnly: newReadOnly(config.ReadOnlyOption),
 	}
 	r.rand = rand.New(rand.NewSource(int64(config.NodeID + r.id)))
 	for _, p := range raftConfig.Peers {
@@ -197,7 +198,7 @@ func (r *raftFsm) Step(m *proto.Message) {
 
 func (r *raftFsm) loadState(state proto.HardState) error {
 	if state.Commit < r.raftLog.committed || state.Commit > r.raftLog.lastIndex() {
-		return errors.New(fmt.Sprintf("[raft->loadState][%v] state.commit %d is out of range [%d, %d]", r.id, state.Commit, r.raftLog.committed, r.raftLog.lastIndex()))
+		return fmt.Errorf("[raft->loadState][%v] state.commit %d is out of range [%d, %d]", r.id, state.Commit, r.raftLog.committed, r.raftLog.lastIndex())
 	}
 
 	r.term = state.Term
@@ -316,6 +317,7 @@ func (r *raftFsm) reset(term, lasti uint64, isLeader bool) {
 	r.heartbeatElapsed = 0
 	r.votes = make(map[uint64]bool)
 	r.pendingConf = false
+	r.readOnly.reset(ErrNotLeader)
 
 	if isLeader {
 		r.randElectionTick = r.config.ElectionTick - 1
@@ -375,6 +377,39 @@ func (r *raftFsm) restore(meta proto.SnapshotMeta) {
 	}
 }
 
+func (r *raftFsm) addReadIndex(futures []*Future) {
+	// not leader
+	if r.leader != r.config.NodeID {
+		respondReadIndex(futures, 0, ErrNotLeader)
+		return
+	}
+
+	// no commit log in current leader's term
+	// TODO: wait for commit
+	if r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(r.raftLog.committed)) != r.term {
+		respondReadIndex(futures, 0, ErrRetryLater)
+		return
+	}
+
+	// doesn't need to wait qurum ack
+	if r.config.ReadOnlyOption == ReadOnlyLeaseBased || r.quorum() <= 1 {
+		respondReadIndex(futures, r.raftLog.committed, nil)
+		return
+	}
+
+	r.readOnly.add(r.raftLog.committed, futures)
+	for id := range r.replicas {
+		if id == r.config.NodeID {
+			continue
+		}
+		msg := proto.GetMessage()
+		msg.Type = proto.ReqCheckQuorum
+		msg.To = id
+		msg.Index = r.raftLog.committed
+		r.send(msg)
+	}
+}
+
 func numOfPendingConf(ents []*proto.Entry) int {
 	n := 0
 	for i := range ents {
@@ -383,4 +418,14 @@ func numOfPendingConf(ents []*proto.Entry) int {
 		}
 	}
 	return n
+}
+
+func respondReadIndex(future []*Future, index uint64, err error) {
+	for _, f := range future {
+		if err != nil {
+			f.respond(nil, err)
+		} else {
+			f.respond(index, nil)
+		}
+	}
 }

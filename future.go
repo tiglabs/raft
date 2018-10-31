@@ -31,6 +31,7 @@ func (d *deferError) error() <-chan error {
 	return d.errCh
 }
 
+// Future the future
 type Future struct {
 	deferError
 	respCh chan interface{}
@@ -53,6 +54,7 @@ func (f *Future) respond(resp interface{}, err error) {
 	}
 }
 
+// Response wait response
 func (f *Future) Response() (resp interface{}, err error) {
 	select {
 	case err = <-f.error():
@@ -61,6 +63,8 @@ func (f *Future) Response() (resp interface{}, err error) {
 		return
 	}
 }
+
+// AsyncResponse export channels
 func (f *Future) AsyncResponse() (respCh <-chan interface{}, errCh <-chan error) {
 	return f.respCh, f.errCh
 }

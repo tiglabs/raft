@@ -253,6 +253,11 @@ func stepElectionAck(r *raftFsm, m *proto.Message) {
 		proto.ReturnMessage(m)
 		return
 
+	case proto.RespCheckQuorum:
+		r.readOnly.recvAck(m.Index, m.From, r.quorum())
+		proto.ReturnMessage(m)
+		return
+
 	case proto.ReqMsgVote:
 		nmsg := proto.GetMessage()
 		nmsg.Type = proto.RespMsgVote

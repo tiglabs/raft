@@ -218,6 +218,7 @@ func (s *raft) run() {
 	defer func() {
 		s.doStop()
 		s.resetPending(ErrStopped)
+		s.raftFsm.readOnly.reset(ErrStopped)
 		s.stopSnapping()
 		s.raftConfig.Storage.Close()
 		close(s.done)
@@ -291,7 +292,7 @@ func (s *raft) run() {
 				default:
 					s.raftFsm.Step(m)
 				}
-				var respErr bool = true
+				var respErr = true
 				if m.Type == proto.RespMsgAppend && m.Reject != true {
 					respErr = false
 				}
@@ -363,7 +364,7 @@ func (s *raft) run() {
 					break
 				}
 			}
-			s.handleReadIndex(futures)
+			s.raftFsm.addReadIndex(futures)
 		}
 
 	}
@@ -701,7 +702,7 @@ func (s *raft) handlePanic(err interface{}) {
 
 	fatal := &FatalError{
 		ID:  s.raftFsm.id,
-		Err: fmt.Errorf("raft[%v] occur panic error: [%v].", s.raftFsm.id, err),
+		Err: fmt.Errorf("raft[%v] occur panic error: [%v]", s.raftFsm.id, err),
 	}
 	s.raftConfig.StateMachine.HandleFatalEvent(fatal)
 }
@@ -720,24 +721,5 @@ func (s *raft) readIndex(future *Future) {
 	case <-s.stopc:
 		future.respond(nil, ErrStopped)
 	case s.readIndexC <- future:
-	}
-}
-
-func (s *raft) handleReadIndex(futures []*Future) {
-	// not leader
-	if s.raftFsm.leader != s.config.NodeID {
-		for _, f := range futures {
-			f.respond(nil, ErrNotLeader)
-		}
-		return
-	}
-
-	// no commit log in current leader's term
-	raftLog := s.raftFsm.raftLog
-	if raftLog.zeroTermOnErrCompacted(raftLog.term(raftLog.committed)) != s.raftFsm.term {
-		for _, f := range futures {
-			f.respond(nil, ErrRetryLater)
-		}
-		return
 	}
 }
