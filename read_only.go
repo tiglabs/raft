@@ -44,7 +44,8 @@ type readOnly struct {
 
 func newReadOnly(option ReadOnlyOption) *readOnly {
 	return &readOnly{
-		option: option,
+		option:           option,
+		pendingReadIndex: make(map[uint64]*readIndexStatus),
 	}
 }
 
@@ -93,6 +94,6 @@ func (r *readOnly) reset(err error) {
 			respondReadIndex(status.futures, 0, err)
 		}
 	}
-	r.pendingReadIndex = nil
+	r.pendingReadIndex = make(map[uint64]*readIndexStatus)
 	r.readIndexQueue = nil
 }

@@ -196,6 +196,11 @@ func stepLeader(r *raftFsm, m *proto.Message) {
 		pr.pause()
 		proto.ReturnMessage(m)
 		return
+
+	case proto.RespCheckQuorum:
+		r.readOnly.recvAck(m.Index, m.From, r.quorum())
+		proto.ReturnMessage(m)
+		return
 	}
 }
 
