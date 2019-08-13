@@ -1,4 +1,4 @@
-// Copyright 2018 The TigLabs raft Authors.
+// Copyright 2018 The tiglabs raft Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -284,7 +284,7 @@ func TestWithPriorityAndDown(t *testing.T) {
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	peers := []proto.Peer{proto.Peer{ID: 1, Priority: 1}, proto.Peer{ID: 2, Priority: 3}, proto.Peer{ID: 3, Priority: 2}}
+	peers := []proto.Peer{{ID: 1, Priority: 1}, {ID: 2, Priority: 3}, {ID: 3, Priority: 2}}
 	servers := initTestServer(peers, false, true)
 	fmt.Println("waiting electing leader....")
 	if ns := waitElect(servers, w); ns.nodeID != 2 && ns.nodeID != 3 {

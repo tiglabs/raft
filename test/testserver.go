@@ -1,4 +1,4 @@
-// Copyright 2018 The TigLabs raft Authors.
+// Copyright 2018 The tiglabs raft Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ var (
 	temp        = "0123456789abcdefghijklmnopqrstuvwxyz"
 	format_time = "2006-01-02 15:04:05.000"
 
-	peers = []proto.Peer{proto.Peer{ID: 1}, proto.Peer{ID: 2}, proto.Peer{ID: 3}}
+	peers = []proto.Peer{{ID: 1}, {ID: 2}, {ID: 3}}
 )
 
 func init() {
@@ -86,7 +86,7 @@ func (nm *nodeManager) AllNodes() []uint64 {
 	defer nm.Unlock()
 
 	nodes := make([]uint64, 0)
-	for k, _ := range nm.nodes {
+	for k := range nm.nodes {
 		nodes = append(nodes, k)
 	}
 	return nodes
