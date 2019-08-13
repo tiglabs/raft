@@ -1,4 +1,5 @@
 // Copyright 2015 The etcd Authors
+// Modified work copyright 2018 The tiglabs Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +22,7 @@ import (
 
 	"github.com/tiglabs/raft/logger"
 	"github.com/tiglabs/raft/proto"
+	"time"
 )
 
 // NoLeader is a placeholder nodeID used when there is no leader.
@@ -130,7 +132,18 @@ func newRaftFsm(config *Config, raftConfig *RaftConfig) (*raftFsm, error) {
 		logger.Debug("newRaft[%v] [peers: [%s], term: %d, commit: %d, applied: %d, lastindex: %d, lastterm: %d]",
 			r.id, strings.Join(peerStrs, ","), r.term, r.raftLog.committed, r.raftLog.applied, r.raftLog.lastIndex(), r.raftLog.lastTerm())
 	}
+	go r.doRandomSeed()
 	return r, nil
+}
+
+func (r *raftFsm) doRandomSeed() {
+	ticker := time.Tick(time.Duration(rand.Intn(5)) * time.Second)
+	for {
+		select {
+		case <-ticker:
+			r.rand.Seed(time.Now().UnixNano())
+		}
+	}
 }
 
 // raft main method
@@ -207,7 +220,7 @@ func (r *raftFsm) loadState(state proto.HardState) error {
 }
 
 func (r *raftFsm) recoverCommit() error {
-	for r.raftLog.applied < r.raftLog.committed {
+	for r.raftLog.applied <= r.raftLog.committed {
 		committedEntries := r.raftLog.nextEnts(64 * MB)
 		for _, entry := range committedEntries {
 			r.raftLog.appliedTo(entry.Index)
@@ -229,6 +242,9 @@ func (r *raftFsm) recoverCommit() error {
 				}
 				r.applyConfChange(cc)
 			}
+		}
+		if r.raftLog.applied == r.raftLog.committed {
+			break
 		}
 	}
 	return nil
@@ -337,7 +353,10 @@ func (r *raftFsm) reset(term, lasti uint64, isLeader bool) {
 }
 
 func (r *raftFsm) resetRandomizedElectionTimeout() {
-	r.randElectionTick = r.config.ElectionTick + r.rand.Intn(r.config.ElectionTick)
+	randTick := r.rand.Intn(r.config.ElectionTick)
+	r.randElectionTick = r.config.ElectionTick + randTick
+	logger.Debug("raft[%v] random election timeout randElectionTick=%v, config.ElectionTick=%v, randTick=%v", r.id,
+		r.randElectionTick, r.config.ElectionTick, randTick)
 }
 
 func (r *raftFsm) pastElectionTimeout() bool {

@@ -23,7 +23,7 @@ import (
 )
 
 func TestFindConflict(t *testing.T) {
-	previousEnts := []*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 3}}
+	previousEnts := []*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}}
 	tests := []struct {
 		ents      []*proto.Entry
 		wconflict uint64
@@ -31,18 +31,18 @@ func TestFindConflict(t *testing.T) {
 		// no conflict, empty ent
 		{[]*proto.Entry{}, 0},
 		// no conflict
-		{[]*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 3}}, 0},
-		{[]*proto.Entry{&proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 3}}, 0},
-		{[]*proto.Entry{&proto.Entry{Index: 3, Term: 3}}, 0},
+		{[]*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}}, 0},
+		{[]*proto.Entry{{Index: 2, Term: 2}, {Index: 3, Term: 3}}, 0},
+		{[]*proto.Entry{{Index: 3, Term: 3}}, 0},
 		// no conflict, but has new entries
-		{[]*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 3}, &proto.Entry{Index: 4, Term: 4}, &proto.Entry{Index: 5, Term: 4}}, 4},
-		{[]*proto.Entry{&proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 3}, &proto.Entry{Index: 4, Term: 4}, &proto.Entry{Index: 5, Term: 4}}, 4},
-		{[]*proto.Entry{&proto.Entry{Index: 3, Term: 3}, &proto.Entry{Index: 4, Term: 4}, &proto.Entry{Index: 5, Term: 4}}, 4},
-		{[]*proto.Entry{&proto.Entry{Index: 4, Term: 4}, &proto.Entry{Index: 5, Term: 4}}, 4},
+		{[]*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 4}}, 4},
+		{[]*proto.Entry{{Index: 2, Term: 2}, {Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 4}}, 4},
+		{[]*proto.Entry{{Index: 3, Term: 3}, {Index: 4, Term: 4}, {Index: 5, Term: 4}}, 4},
+		{[]*proto.Entry{{Index: 4, Term: 4}, {Index: 5, Term: 4}}, 4},
 		// conflicts with existing entries
-		{[]*proto.Entry{&proto.Entry{Index: 1, Term: 4}, &proto.Entry{Index: 2, Term: 4}}, 1},
-		{[]*proto.Entry{&proto.Entry{Index: 2, Term: 1}, &proto.Entry{Index: 3, Term: 4}, &proto.Entry{Index: 4, Term: 4}}, 2},
-		{[]*proto.Entry{&proto.Entry{Index: 3, Term: 1}, &proto.Entry{Index: 4, Term: 2}, &proto.Entry{Index: 5, Term: 4}, &proto.Entry{Index: 6, Term: 4}}, 3},
+		{[]*proto.Entry{{Index: 1, Term: 4}, {Index: 2, Term: 4}}, 1},
+		{[]*proto.Entry{{Index: 2, Term: 1}, {Index: 3, Term: 4}, {Index: 4, Term: 4}}, 2},
+		{[]*proto.Entry{{Index: 3, Term: 1}, {Index: 4, Term: 2}, {Index: 5, Term: 4}, {Index: 6, Term: 4}}, 3},
 	}
 
 	for i, tt := range tests {
@@ -57,7 +57,7 @@ func TestFindConflict(t *testing.T) {
 }
 
 func TestIsUpToDate(t *testing.T) {
-	previousEnts := []*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 3}}
+	previousEnts := []*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}}
 	raftLog, _ := newRaftLog(storage.DefaultMemoryStorage())
 	raftLog.append(previousEnts...)
 
@@ -89,7 +89,7 @@ func TestIsUpToDate(t *testing.T) {
 }
 
 func TestAppend(t *testing.T) {
-	previousEnts := []*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}}
+	previousEnts := []*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}
 	tests := []struct {
 		ents      []*proto.Entry
 		windex    uint64
@@ -99,27 +99,27 @@ func TestAppend(t *testing.T) {
 		{
 			[]*proto.Entry{},
 			2,
-			[]*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}},
+			[]*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}},
 			3,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 3, Term: 2}},
+			[]*proto.Entry{{Index: 3, Term: 2}},
 			3,
-			[]*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 2}},
+			[]*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 2}},
 			3,
 		},
 		// conflicts with index 1
 		{
-			[]*proto.Entry{&proto.Entry{Index: 1, Term: 2}},
+			[]*proto.Entry{{Index: 1, Term: 2}},
 			1,
-			[]*proto.Entry{&proto.Entry{Index: 1, Term: 2}},
+			[]*proto.Entry{{Index: 1, Term: 2}},
 			1,
 		},
 		// conflicts with index 2
 		{
-			[]*proto.Entry{&proto.Entry{Index: 2, Term: 3}, &proto.Entry{Index: 3, Term: 3}},
+			[]*proto.Entry{{Index: 2, Term: 3}, {Index: 3, Term: 3}},
 			3,
-			[]*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 3}, &proto.Entry{Index: 3, Term: 3}},
+			[]*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 3}, {Index: 3, Term: 3}},
 			2,
 		},
 	}
@@ -147,7 +147,7 @@ func TestAppend(t *testing.T) {
 }
 
 func TestLogMaybeAppend(t *testing.T) {
-	previousEnts := []*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}, &proto.Entry{Index: 3, Term: 3}}
+	previousEnts := []*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}, {Index: 3, Term: 3}}
 	lastindex := uint64(3)
 	lastterm := uint64(3)
 	commit := uint64(1)
@@ -165,12 +165,12 @@ func TestLogMaybeAppend(t *testing.T) {
 	}{
 		// not match: term is different
 		{
-			lastterm - 1, lastindex, lastindex, []*proto.Entry{&proto.Entry{Index: lastindex + 1, Term: 4}},
+			lastterm - 1, lastindex, lastindex, []*proto.Entry{{Index: lastindex + 1, Term: 4}},
 			0, false, commit, false,
 		},
 		// not match: index out of bound
 		{
-			lastterm, lastindex + 1, lastindex, []*proto.Entry{&proto.Entry{Index: lastindex + 2, Term: 4}},
+			lastterm, lastindex + 1, lastindex, []*proto.Entry{{Index: lastindex + 2, Term: 4}},
 			0, false, commit, false,
 		},
 		// match with the last existing entry
@@ -195,36 +195,36 @@ func TestLogMaybeAppend(t *testing.T) {
 			0, true, commit, false, // commit do not decrease
 		},
 		{
-			lastterm, lastindex, lastindex, []*proto.Entry{&proto.Entry{Index: lastindex + 1, Term: 4}},
+			lastterm, lastindex, lastindex, []*proto.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 1, []*proto.Entry{&proto.Entry{Index: lastindex + 1, Term: 4}},
+			lastterm, lastindex, lastindex + 1, []*proto.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex + 1, false,
 		},
 		{
-			lastterm, lastindex, lastindex + 2, []*proto.Entry{&proto.Entry{Index: lastindex + 1, Term: 4}},
+			lastterm, lastindex, lastindex + 2, []*proto.Entry{{Index: lastindex + 1, Term: 4}},
 			lastindex + 1, true, lastindex + 1, false, // do not increase commit higher than lastnewi
 		},
 		{
-			lastterm, lastindex, lastindex + 2, []*proto.Entry{&proto.Entry{Index: lastindex + 1, Term: 4}, &proto.Entry{Index: lastindex + 2, Term: 4}},
+			lastterm, lastindex, lastindex + 2, []*proto.Entry{{Index: lastindex + 1, Term: 4}, {Index: lastindex + 2, Term: 4}},
 			lastindex + 2, true, lastindex + 2, false,
 		},
 		// match with the the entry in the middle
 		{
-			lastterm - 1, lastindex - 1, lastindex, []*proto.Entry{&proto.Entry{Index: lastindex, Term: 4}},
+			lastterm - 1, lastindex - 1, lastindex, []*proto.Entry{{Index: lastindex, Term: 4}},
 			lastindex, true, lastindex, false,
 		},
 		{
-			lastterm - 2, lastindex - 2, lastindex, []*proto.Entry{&proto.Entry{Index: lastindex - 1, Term: 4}},
+			lastterm - 2, lastindex - 2, lastindex, []*proto.Entry{{Index: lastindex - 1, Term: 4}},
 			lastindex - 1, true, lastindex - 1, false,
 		},
 		{
-			lastterm - 3, lastindex - 3, lastindex, []*proto.Entry{&proto.Entry{Index: lastindex - 2, Term: 4}},
+			lastterm - 3, lastindex - 3, lastindex, []*proto.Entry{{Index: lastindex - 2, Term: 4}},
 			lastindex - 2, true, lastindex - 2, true, // conflict with existing committed entry
 		},
 		{
-			lastterm - 2, lastindex - 2, lastindex, []*proto.Entry{&proto.Entry{Index: lastindex - 1, Term: 4}, &proto.Entry{Index: lastindex, Term: 4}},
+			lastterm - 2, lastindex - 2, lastindex, []*proto.Entry{{Index: lastindex - 1, Term: 4}, {Index: lastindex, Term: 4}},
 			lastindex, true, lastindex, false,
 		},
 	}
@@ -274,7 +274,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	lastTerm := lastIndex
 	storage := storage.DefaultMemoryStorage()
 	for i = 1; i <= unstableIndex; i++ {
-		storage.StoreEntries([]*proto.Entry{&proto.Entry{Term: uint64(i), Index: uint64(i)}})
+		storage.StoreEntries([]*proto.Entry{{Term: uint64(i), Index: uint64(i)}})
 	}
 	raftLog, _ := newRaftLog(storage)
 	for i = unstableIndex; i < lastIndex; i++ {
@@ -330,7 +330,7 @@ func TestCompactionSideEffects(t *testing.T) {
 }
 
 func TestNextEnts(t *testing.T) {
-	ents := []*proto.Entry{&proto.Entry{Term: 1, Index: 4}, &proto.Entry{Term: 1, Index: 5}, &proto.Entry{Term: 1, Index: 6}}
+	ents := []*proto.Entry{{Term: 1, Index: 4}, {Term: 1, Index: 5}, {Term: 1, Index: 6}}
 	tests := []struct {
 		applied uint64
 		wents   []*proto.Entry
@@ -356,7 +356,7 @@ func TestNextEnts(t *testing.T) {
 }
 
 func TestUnstableEnts(t *testing.T) {
-	previousEnts := []*proto.Entry{&proto.Entry{Term: 1, Index: 1}, &proto.Entry{Term: 2, Index: 2}}
+	previousEnts := []*proto.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}}
 	tests := []struct {
 		unstable uint64
 		wents    []*proto.Entry
@@ -390,7 +390,7 @@ func TestUnstableEnts(t *testing.T) {
 }
 
 func TestCommitTo(t *testing.T) {
-	previousEnts := []*proto.Entry{&proto.Entry{Term: 1, Index: 1}, &proto.Entry{Term: 2, Index: 2}, &proto.Entry{Term: 3, Index: 3}}
+	previousEnts := []*proto.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}, {Term: 3, Index: 3}}
 	commit := uint64(2)
 	tests := []struct {
 		commit  uint64
@@ -434,7 +434,7 @@ func TestStableTo(t *testing.T) {
 	}
 	for i, tt := range tests {
 		raftLog, _ := newRaftLog(storage.DefaultMemoryStorage())
-		raftLog.append([]*proto.Entry{&proto.Entry{Index: 1, Term: 1}, &proto.Entry{Index: 2, Term: 2}}...)
+		raftLog.append([]*proto.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 2}}...)
 		raftLog.stableTo(tt.stablei, tt.stablet)
 		if raftLog.unstable.offset != tt.wunstable {
 			t.Errorf("#%d: unstable = %d, want %d", i, raftLog.unstable.offset, tt.wunstable)
@@ -459,13 +459,13 @@ func TestStableToWithSnap(t *testing.T) {
 		{snapi, snapt + 1, nil, snapi + 1},
 		{snapi - 1, snapt + 1, nil, snapi + 1},
 
-		{snapi + 1, snapt, []*proto.Entry{&proto.Entry{Index: snapi + 1, Term: snapt}}, snapi + 2},
-		{snapi, snapt, []*proto.Entry{&proto.Entry{Index: snapi + 1, Term: snapt}}, snapi + 1},
-		{snapi - 1, snapt, []*proto.Entry{&proto.Entry{Index: snapi + 1, Term: snapt}}, snapi + 1},
+		{snapi + 1, snapt, []*proto.Entry{{Index: snapi + 1, Term: snapt}}, snapi + 2},
+		{snapi, snapt, []*proto.Entry{{Index: snapi + 1, Term: snapt}}, snapi + 1},
+		{snapi - 1, snapt, []*proto.Entry{{Index: snapi + 1, Term: snapt}}, snapi + 1},
 
-		{snapi + 1, snapt + 1, []*proto.Entry{&proto.Entry{Index: snapi + 1, Term: snapt}}, snapi + 1},
-		{snapi, snapt + 1, []*proto.Entry{&proto.Entry{Index: snapi + 1, Term: snapt}}, snapi + 1},
-		{snapi - 1, snapt + 1, []*proto.Entry{&proto.Entry{Index: snapi + 1, Term: snapt}}, snapi + 1},
+		{snapi + 1, snapt + 1, []*proto.Entry{{Index: snapi + 1, Term: snapt}}, snapi + 1},
+		{snapi, snapt + 1, []*proto.Entry{{Index: snapi + 1, Term: snapt}}, snapi + 1},
+		{snapi - 1, snapt + 1, []*proto.Entry{{Index: snapi + 1, Term: snapt}}, snapi + 1},
 	}
 	for i, tt := range tests {
 		s := storage.DefaultMemoryStorage()
@@ -505,7 +505,7 @@ func TestCompaction(t *testing.T) {
 
 			storage := storage.DefaultMemoryStorage()
 			for i := uint64(1); i <= tt.lastIndex; i++ {
-				storage.StoreEntries([]*proto.Entry{&proto.Entry{Index: i}})
+				storage.StoreEntries([]*proto.Entry{{Index: i}})
 			}
 			raftLog, _ := newRaftLog(storage)
 			raftLog.maybeCommit(tt.lastIndex, 0)
@@ -704,7 +704,7 @@ func TestSlice(t *testing.T) {
 	storage := storage.DefaultMemoryStorage()
 	storage.ApplySnapshot(proto.SnapshotMeta{Index: offset})
 	for i = 1; i < num/2; i++ {
-		storage.StoreEntries([]*proto.Entry{&proto.Entry{Index: offset + i, Term: offset + i}})
+		storage.StoreEntries([]*proto.Entry{{Index: offset + i, Term: offset + i}})
 	}
 	l, _ := newRaftLog(storage)
 	for i = num / 2; i < num; i++ {
@@ -722,19 +722,19 @@ func TestSlice(t *testing.T) {
 		// test no limit
 		{offset - 1, offset + 1, noLimit, nil, false},
 		{offset, offset + 1, noLimit, nil, false},
-		{half - 1, half + 1, noLimit, []*proto.Entry{&proto.Entry{Index: half - 1, Term: half - 1}, &proto.Entry{Index: half, Term: half}}, false},
-		{half, half + 1, noLimit, []*proto.Entry{&proto.Entry{Index: half, Term: half}}, false},
-		{last - 1, last, noLimit, []*proto.Entry{&proto.Entry{Index: last - 1, Term: last - 1}}, false},
+		{half - 1, half + 1, noLimit, []*proto.Entry{{Index: half - 1, Term: half - 1}, {Index: half, Term: half}}, false},
+		{half, half + 1, noLimit, []*proto.Entry{{Index: half, Term: half}}, false},
+		{last - 1, last, noLimit, []*proto.Entry{{Index: last - 1, Term: last - 1}}, false},
 		{last, last + 1, noLimit, nil, true},
 
 		// test limit
-		{half - 1, half + 1, 0, []*proto.Entry{&proto.Entry{Index: half - 1, Term: half - 1}}, false},
-		{half - 1, half + 1, uint64(halfe.Size() + 1), []*proto.Entry{&proto.Entry{Index: half - 1, Term: half - 1}}, false},
-		{half - 2, half + 1, uint64(halfe.Size() + 1), []*proto.Entry{&proto.Entry{Index: half - 2, Term: half - 2}}, false},
-		{half - 1, half + 1, uint64(halfe.Size() * 2), []*proto.Entry{&proto.Entry{Index: half - 1, Term: half - 1}, &proto.Entry{Index: half, Term: half}}, false},
-		{half - 1, half + 2, uint64(halfe.Size() * 3), []*proto.Entry{&proto.Entry{Index: half - 1, Term: half - 1}, &proto.Entry{Index: half, Term: half}, &proto.Entry{Index: half + 1, Term: half + 1}}, false},
-		{half, half + 2, uint64(halfe.Size()), []*proto.Entry{&proto.Entry{Index: half, Term: half}}, false},
-		{half, half + 2, uint64(halfe.Size() * 2), []*proto.Entry{&proto.Entry{Index: half, Term: half}, &proto.Entry{Index: half + 1, Term: half + 1}}, false},
+		{half - 1, half + 1, 0, []*proto.Entry{{Index: half - 1, Term: half - 1}}, false},
+		{half - 1, half + 1, uint64(halfe.Size() + 1), []*proto.Entry{{Index: half - 1, Term: half - 1}}, false},
+		{half - 2, half + 1, uint64(halfe.Size() + 1), []*proto.Entry{{Index: half - 2, Term: half - 2}}, false},
+		{half - 1, half + 1, uint64(halfe.Size() * 2), []*proto.Entry{{Index: half - 1, Term: half - 1}, {Index: half, Term: half}}, false},
+		{half - 1, half + 2, uint64(halfe.Size() * 3), []*proto.Entry{{Index: half - 1, Term: half - 1}, {Index: half, Term: half}, {Index: half + 1, Term: half + 1}}, false},
+		{half, half + 2, uint64(halfe.Size()), []*proto.Entry{{Index: half, Term: half}}, false},
+		{half, half + 2, uint64(halfe.Size() * 2), []*proto.Entry{{Index: half, Term: half}, {Index: half + 1, Term: half + 1}}, false},
 	}
 
 	for j, tt := range tests {

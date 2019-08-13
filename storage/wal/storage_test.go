@@ -1,4 +1,4 @@
-// Copyright 2018 The TigLabs raft Authors.
+// Copyright 2018 The tiglabs raft Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -257,7 +257,7 @@ func TestLogStorage1(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = s.StoreEntries([]*proto.Entry{&proto.Entry{Index: hi}})
+	err = s.StoreEntries([]*proto.Entry{{Index: hi}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +482,7 @@ func TestTruncateOld(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 重新打开后获取
-	err = s.StoreEntries([]*proto.Entry{&proto.Entry{Index: hi}})
+	err = s.StoreEntries([]*proto.Entry{{Index: hi}})
 	if err != nil {
 		t.Fatal(err)
 	}

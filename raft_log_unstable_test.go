@@ -30,7 +30,7 @@ func TestMaybeLastIndex(t *testing.T) {
 	}{
 		// last in entries
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5, true, 5,
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5, true, 5,
 		},
 		// empty unstable
 		{
@@ -63,13 +63,13 @@ func TestUnstableMaybeTerm(t *testing.T) {
 	}{
 		// term from entries
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5, 5, true, 1,
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5, 5, true, 1,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5, 6, false, 0,
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5, 6, false, 0,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5, 4, false, 0,
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5, 4, false, 0,
 		},
 		{
 			[]*proto.Entry{}, 0, 5, false, 0,
@@ -93,7 +93,7 @@ func TestUnstableMaybeTerm(t *testing.T) {
 
 func TestUnstableRestore(t *testing.T) {
 	u := unstable{
-		entries: []*proto.Entry{&proto.Entry{Index: 5, Term: 1}},
+		entries: []*proto.Entry{{Index: 5, Term: 1}},
 		offset:  5,
 	}
 	u.restore(6)
@@ -118,20 +118,20 @@ func TestUnstableStableTo(t *testing.T) {
 			[]*proto.Entry{}, 0, 5, 1, 0, 0,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5, 5, 1, 6, 0,
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5, 5, 1, 6, 0,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}, &proto.Entry{Index: 6, Term: 1}}, 5,
+			[]*proto.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}}, 5,
 			5, 1, 6, 1,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 6, Term: 2}}, 6, 6, 1, 6, 1,
+			[]*proto.Entry{{Index: 6, Term: 2}}, 6, 6, 1, 6, 1,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5, 4, 1, 5, 1,
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5, 4, 1, 5, 1,
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5, 4, 2, 5, 1,
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5, 4, 2, 5, 1,
 		},
 	}
 
@@ -161,31 +161,31 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 	}{
 		// append to the end
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5,
-			[]*proto.Entry{&proto.Entry{Index: 6, Term: 1}, &proto.Entry{Index: 7, Term: 1}},
-			5, []*proto.Entry{&proto.Entry{Index: 5, Term: 1}, &proto.Entry{Index: 6, Term: 1}, &proto.Entry{Index: 7, Term: 1}},
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5,
+			[]*proto.Entry{{Index: 6, Term: 1}, {Index: 7, Term: 1}},
+			5, []*proto.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}},
 		},
 		// replace the unstable entries
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5,
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 2}, &proto.Entry{Index: 6, Term: 2}},
-			5, []*proto.Entry{&proto.Entry{Index: 5, Term: 2}, &proto.Entry{Index: 6, Term: 2}},
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5,
+			[]*proto.Entry{{Index: 5, Term: 2}, {Index: 6, Term: 2}},
+			5, []*proto.Entry{{Index: 5, Term: 2}, {Index: 6, Term: 2}},
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}}, 5,
-			[]*proto.Entry{&proto.Entry{Index: 4, Term: 2}, &proto.Entry{Index: 5, Term: 2}, &proto.Entry{Index: 6, Term: 2}},
-			4, []*proto.Entry{&proto.Entry{Index: 4, Term: 2}, &proto.Entry{Index: 5, Term: 2}, &proto.Entry{Index: 6, Term: 2}},
+			[]*proto.Entry{{Index: 5, Term: 1}}, 5,
+			[]*proto.Entry{{Index: 4, Term: 2}, {Index: 5, Term: 2}, {Index: 6, Term: 2}},
+			4, []*proto.Entry{{Index: 4, Term: 2}, {Index: 5, Term: 2}, {Index: 6, Term: 2}},
 		},
 		// truncate the existing entries and append
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}, &proto.Entry{Index: 6, Term: 1}, &proto.Entry{Index: 7, Term: 1}}, 5,
-			[]*proto.Entry{&proto.Entry{Index: 6, Term: 2}},
-			5, []*proto.Entry{&proto.Entry{Index: 5, Term: 1}, &proto.Entry{Index: 6, Term: 2}},
+			[]*proto.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}}, 5,
+			[]*proto.Entry{{Index: 6, Term: 2}},
+			5, []*proto.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 2}},
 		},
 		{
-			[]*proto.Entry{&proto.Entry{Index: 5, Term: 1}, &proto.Entry{Index: 6, Term: 1}, &proto.Entry{Index: 7, Term: 1}}, 5,
-			[]*proto.Entry{&proto.Entry{Index: 7, Term: 2}, &proto.Entry{Index: 8, Term: 2}},
-			5, []*proto.Entry{&proto.Entry{Index: 5, Term: 1}, &proto.Entry{Index: 6, Term: 1}, &proto.Entry{Index: 7, Term: 2}, &proto.Entry{Index: 8, Term: 2}},
+			[]*proto.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 1}}, 5,
+			[]*proto.Entry{{Index: 7, Term: 2}, {Index: 8, Term: 2}},
+			5, []*proto.Entry{{Index: 5, Term: 1}, {Index: 6, Term: 1}, {Index: 7, Term: 2}, {Index: 8, Term: 2}},
 		},
 	}
 
