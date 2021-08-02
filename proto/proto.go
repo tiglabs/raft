@@ -42,6 +42,10 @@ const (
 	LeaseMsgTimeout
 	ReqCheckQuorum
 	RespCheckQuorum
+
+	MsgTypeEnd
+
+	MsgMagic = 0x5A
 )
 
 const (
@@ -163,6 +167,8 @@ func (t MsgType) String() string {
 		return "ReqCheckQuorum"
 	case 15:
 		return "RespCheckQuorum"
+	case 90:
+		return "MsgMagic"
 	}
 	return "unkown"
 }
